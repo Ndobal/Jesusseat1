@@ -16,6 +16,10 @@ Errors return `{ "error": "safe human-readable message" }` with 400/401/403/404/
 | GET | /api/me | Current user, csrf and their church list |
 | POST | /api/auth/logout | Revoke current session |
 | POST | /api/auth/resend | Authenticated; rotate verification link, rate limited |
+| GET | /api/auth/sessions | Own active sessions; opaque revocation ID, current/start/expiry; no bearer tokens |
+| DELETE | /api/auth/sessions/:session | Revoke own selected session; signedOut=true and clear cookie if current |
+| POST | /api/auth/logout-others | Revoke other sessions of this account; preserve current session |
+| POST | /api/auth/password | currentPassword, password; rotate session/csrf, revoke others and reset links, queue notification |
 | POST | /api/churches | Verified account; name, slug, structure, country, city, timezone, acceptPolicy=true, policyVersion |
 | POST | /api/invitations/accept | Verified account with matching email; token |
 | GET | /api/churches/:id | Church profile, actor permissions, scoped branches, derived onboarding |
@@ -23,6 +27,8 @@ Errors return `{ "error": "safe human-readable message" }` with 400/401/403/404/
 | POST | /api/churches/:id/branches | branches.manage; name, label, location, parent_id; scope checked |
 | GET | /api/churches/:id/roles | team.read; church roles and permissions |
 | POST | /api/churches/:id/roles | Church-wide roles.manage; name, permissions; cannot grant absent permission |
+| PATCH | /api/churches/:id/roles/:role | Church-wide roles.manage; custom only; name, permissions, current version; confirmExpansion=true when expanding assigned/invited access |
+| DELETE | /api/churches/:id/roles/:role | Archive unassigned custom role; current version required; pending active invitations must be revoked |
 | GET | /api/churches/:id/team | team.read; scoped members, managers also get scoped invitations |
 | POST | /api/churches/:id/invitations | team.manage; email, role_id, branch_id; queued 7-day link |
 | DELETE | /api/churches/:id/invitations/:invite | Revoke an open invitation within actor authority |
@@ -38,4 +44,6 @@ Future module permissions do not expose future APIs. No platform-super-admin boo
 
 ## Browser routes
 
-`/login`, `/register`, `/forgot`, `/verify#token=…`, `/reset#token=…`, `/invite#token=…`, `/new-church`, `/app?church=:id&tab=:tab`, `/participation`. Token fragments are read and immediately removed from the address bar, retained only in this tab's session storage while the flow is completed, then cleared. Tokens are submitted as JSON, never query strings.
+`/login`, `/register`, `/forgot`, `/verify#token=…`, `/reset#token=…`, `/invite#token=…`, `/new-church`, `/app?church=:id&tab=:tab`, `/security`, `/participation`. Token fragments are read and immediately removed from the address bar, retained only in this tab's session storage while the flow is completed, then cleared. Tokens are submitted as JSON, never query strings.
+
+Role GET returns an opaque version for optimistic concurrency, member/pending-invitation counts for church-wide actors (null for scoped actors), and only active roles. Clients must reload after 409 before editing. Archival preserves historical foreign keys. Built-in roles cannot be archived or modified.

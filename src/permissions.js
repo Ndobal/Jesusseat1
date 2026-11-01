@@ -12,7 +12,7 @@ export const BUILTINS = {
 export function context(db, churchId, userId, permission = 'church.read') {
   const row = db.prepare(`SELECT m.*, r.permissions,r.builtin,c.status FROM memberships m
     JOIN roles r ON r.id=m.role_id AND r.church_id=m.church_id JOIN churches c ON c.id=m.church_id
-    WHERE m.church_id=? AND m.user_id=?`).get(churchId,userId);
+    WHERE m.church_id=? AND m.user_id=? AND r.archived_at IS NULL`).get(churchId,userId);
   if (!row) fail(404,'Church workspace not found.');
   if (row.status !== 'active') fail(403,'This church workspace is suspended.');
   row.permissions = JSON.parse(row.permissions);

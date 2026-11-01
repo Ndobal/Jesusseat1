@@ -8,7 +8,7 @@ import { loadConfig } from './config.js';
 import { deliverMail } from './mail.js';
 
 const publicRoot=fileURLToPath(new URL('../public/',import.meta.url));
-const pages=new Set(['/','/app','/login','/register','/forgot','/reset','/verify','/invite','/new-church','/participation']);
+const pages=new Set(['/','/app','/login','/register','/forgot','/reset','/verify','/invite','/new-church','/participation','/security']);
 const files=new Set(['/app.js','/styles.css','/icon.svg']);
 export function createHttpServer(config,db) {
   const app=createApp({db,...config});

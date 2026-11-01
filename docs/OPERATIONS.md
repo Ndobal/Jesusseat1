@@ -60,3 +60,11 @@ npm test
 ```
 
 The API suite exercises cross-tenant/branch access, role escalation, recovery, origin/CSRF protection, invitation binding/revocation, atomic audit rollback, body validation, mail retries, suspension enforcement, append-only audit and derived onboarding. CI runs checks and tests on Node 24. Browser acceptance covers initial account/church setup and responsive layouts when the managed preview environment is available.
+
+## Phase 2 continuation
+
+Database startup now performs the transactional version-two migration adding role archival. Take a consistent backup before updating an existing installation. The upgrade is repeatable and covered against a version-one fixture. Do not downgrade to the first build without restoring a matching backup: old positional role inserts are incompatible with the extended table.
+
+The personal `/security` page lets users change their password and revoke their own sessions. No raw token/digest/CSRF credentials are exposed in the session inventory. Role edits use optimistic concurrency, explicit expansion confirmation and immediate permission checks; archiving retains historical records. Review PHASE-2.md for remaining acceptance gates.
+
+GitHub Actions initially could not start jobs because GitHub reported an account billing lock. Do not treat that as a passing or failing application test; local checks and tests are the available execution evidence until hosted CI can run. Authenticated browser workflows and mobile device checks remain unverified.

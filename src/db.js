@@ -7,6 +7,10 @@ export function openDatabase(path) {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;');
   db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
+  transaction(db, () => {
+    if (!db.prepare('PRAGMA table_info(roles)').all().some(column => column.name === 'archived_at')) db.exec('ALTER TABLE roles ADD COLUMN archived_at INTEGER');
+    db.prepare('INSERT OR IGNORE INTO schema_migrations VALUES(2,?)').run(Date.now());
+  });
   return db;
 }
 

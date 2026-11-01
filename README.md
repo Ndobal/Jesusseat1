@@ -25,9 +25,11 @@ npm test
 ## Included
 
 - Verified accounts, password recovery and secure sessions.
+- Personal account security, password changes and active-session controls.
 - Church registration and a guided setup checklist.
 - Independent churches, branch networks and denominations.
 - Church isolation, branch scopes, built-in/custom roles and team invitations.
+- Version-checked custom-role edits, expansion confirmation and safe role archival.
 - Church profiles, template preference and multiple visions/missions.
 - Append-only activity history and atomic audit for important changes.
 - Encrypted mail outbox, backup utility, Dockerfile and CI.
@@ -35,6 +37,8 @@ npm test
 ## Documentation
 
 - [Phase 1 review and complete project specification](docs/PHASE-1.md)
+- [Phase 1 closeout](docs/PHASE-1-CLOSEOUT.md)
+- [Phase 2 implementation and acceptance checklist](docs/PHASE-2.md)
 - [API and permissions](docs/API.md)
 - [Setup, deployment, email and recovery](docs/OPERATIONS.md)
 - [Build status, limitations and developer handoff](docs/HANDOFF.md)

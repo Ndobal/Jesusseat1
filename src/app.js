@@ -1,6 +1,8 @@
 import { id, secret, digest, hashPassword, verifyPassword, encrypt, email, password, text, fail, HttpError, rateLimit } from './security.js';
 import { transaction, audit } from './db.js';
 import { PERMISSIONS, BUILTINS, context, requireGlobal, branchesInScope, checkBranch } from './permissions.js';
+import { listSessions, revokeSession, revokeOtherSessions, changePassword } from './account-security.js';
+import { roleVersion, validPermissions, manageRole } from './role-management.js';
 
 export const POLICY_VERSION='2026-11-01-draft-1';
 export const TEMPLATES=['welcome-home','living-faith','grace-heritage','open-doors','the-gathering'];
@@ -47,7 +49,7 @@ export function createApp({db,origin,production=false,outboxKey}) {
   }
   function roleFor(churchId,roleId) {
     if(typeof roleId!=='string'||!/^[a-f0-9]{32}$/.test(roleId))fail(400,'Choose a valid church role.');
-    return db.prepare('SELECT * FROM roles WHERE church_id=? AND id=?').get(churchId,roleId) || fail(400,'Choose a role from this church.');
+    return db.prepare('SELECT * FROM roles WHERE church_id=? AND id=? AND archived_at IS NULL').get(churchId,roleId) || fail(400,'Choose an active role from this church.');
   }
   function onboarding(churchId) {
     const c=db.prepare('SELECT * FROM churches WHERE id=?').get(churchId);
@@ -68,7 +70,7 @@ export function createApp({db,origin,production=false,outboxKey}) {
         if (headers.origin!==origin) fail(403,'Request origin is not allowed.');
         rateLimit(db,`write:${digest(ip)}`,250);
       }
-      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.2.0'}};
+      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.2.1'}};
       if (method==='GET' && path==='/api/config') return {data:{policyVersion:POLICY_VERSION,templates:TEMPLATES,permissions:PERMISSIONS,operator:'Ndovera Limited'}};
       if (method==='POST' && path==='/api/auth/register') {
         rateLimit(db,`register:${digest(ip)}`,8,HOUR);
@@ -90,7 +92,11 @@ export function createApp({db,origin,production=false,outboxKey}) {
         const pass=body.password,user=db.prepare('SELECT * FROM users WHERE email=?').get(address);
         const matches=await verifyPassword(pass,user?.password_hash||await dummyHash);
         if (!user||!matches) fail(401,'Email or password is incorrect.');
-        const s=transaction(db,()=>{ audit(db,null,user.id,'account.login',user.id); return sessionFor(user); });
+        const s=transaction(db,()=>{
+          // Do not create a session with a password invalidated while scrypt was running.
+          if(db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id)?.password_hash!==user.password_hash)fail(401,'Email or password is incorrect.');
+          audit(db,null,user.id,'account.login',user.id); return sessionFor(user);
+        });
         return {data:{csrf:s.csrf},cookie:s.cookie};
       }
       if (method==='POST' && path==='/api/auth/forgot') {
@@ -138,6 +144,17 @@ export function createApp({db,origin,production=false,outboxKey}) {
         if(!s.verified_at) transaction(db,()=>issueToken({id:userId,email:s.email,name:s.name},'verify'));
         return {status:202,data:{message:'If needed, a new verification email has been queued.'}};
       }
+      if(method==='GET' && path==='/api/auth/sessions') return {data:{sessions:listSessions(db,s)}};
+      if(method==='POST' && path==='/api/auth/logout-others') return {data:{message:'Other sessions signed out.',count:revokeOtherSessions(db,s)}};
+      const sessionRoute=path.match(/^\/api\/auth\/sessions\/([a-f0-9]{64})$/);
+      if(method==='DELETE' && sessionRoute) {
+        const current=revokeSession(db,s,sessionRoute[1]);
+        return {data:{message:'Session signed out.',signedOut:current},...(current?{cookie:`${cookieName}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${production?'; Secure':''}`}:{})};
+      }
+      if(method==='POST' && path==='/api/auth/password') {
+        const fresh=await changePassword(db,s,body,sessionFor,queueMail);
+        return {data:{message:'Password changed. Other sessions have been signed out.',csrf:fresh.csrf},cookie:fresh.cookie};
+      }
       verified(s);
       if(method==='POST' && path==='/api/churches') {
         rateLimit(db,`create-church:${userId}`,5,DAY);
@@ -155,7 +172,7 @@ export function createApp({db,origin,production=false,outboxKey}) {
           let admin;
           for(const [builtin,role] of Object.entries(BUILTINS)) {
             const roleId=id(); if(builtin==='church_admin')admin=roleId;
-            db.prepare('INSERT INTO roles VALUES(?,?,?,?,?)').run(roleId,churchId,role.name,builtin,JSON.stringify(role.permissions));
+            db.prepare('INSERT INTO roles(id,church_id,name,builtin,permissions) VALUES(?,?,?,?,?)').run(roleId,churchId,role.name,builtin,JSON.stringify(role.permissions));
           }
           db.prepare('INSERT INTO memberships VALUES(?,?,?,?,?,?)').run(id(),churchId,userId,admin,null,Date.now());
           db.prepare('INSERT INTO branches VALUES(?,?,?,?,?,?)').run(id(),churchId,null,name,body.structure==='independent'?'Church':'Headquarters',city);
@@ -167,7 +184,7 @@ export function createApp({db,origin,production=false,outboxKey}) {
         const token=text(body.token,'Invitation token',30,100);
         let churchId;
         transaction(db,()=>{
-          const inv=db.prepare('SELECT i.* FROM invitations i JOIN churches c ON c.id=i.church_id WHERE i.token_hash=? AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>? AND c.status=\'active\'').get(digest(token),Date.now());
+          const inv=db.prepare('SELECT i.* FROM invitations i JOIN churches c ON c.id=i.church_id JOIN roles r ON r.id=i.role_id AND r.church_id=i.church_id WHERE i.token_hash=? AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>? AND c.status=\'active\' AND r.archived_at IS NULL').get(digest(token),Date.now());
           if(!inv) fail(400,'This invitation is unavailable, expired or already accepted.');
           if(inv.email!==s.email) fail(403,'Sign in with the email address this invitation was sent to.');
           if(db.prepare('SELECT id FROM memberships WHERE church_id=? AND user_id=?').get(inv.church_id,userId)) fail(409,'You already belong to this church.');
@@ -208,17 +225,23 @@ export function createApp({db,origin,production=false,outboxKey}) {
       }
       if(method==='GET' && tail==='roles') {
         context(db,churchId,userId,'team.read');
-        return {data:{roles:db.prepare('SELECT * FROM roles WHERE church_id=? ORDER BY name').all(churchId).map(r=>({...r,permissions:JSON.parse(r.permissions)}))}};
+        return {data:{roles:db.prepare(`SELECT r.*, (SELECT count(*) FROM memberships m WHERE m.role_id=r.id) assigned_members,
+          (SELECT count(*) FROM invitations i WHERE i.role_id=r.id AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>?) pending_invitations
+          FROM roles r WHERE r.church_id=? AND r.archived_at IS NULL ORDER BY r.name`).all(Date.now(),churchId).map(r=>({...r,assigned_members:ctx.branch_id?null:r.assigned_members,pending_invitations:ctx.branch_id?null:r.pending_invitations,version:roleVersion(r),permissions:JSON.parse(r.permissions)}))}};
       }
       if(method==='POST' && tail==='roles') {
         context(db,churchId,userId,'roles.manage');requireGlobal(ctx);
-        const name=text(body.name,'Role name',2,80),perms=body.permissions;
-        if(!Array.isArray(perms)||!perms.length||perms.length>PERMISSIONS.length||!perms.every(p=>PERMISSIONS.includes(p)&&ctx.permissions.includes(p))||!perms.includes('church.read')) fail(400,'Choose valid permissions including church.read.');
+        const name=text(body.name,'Role name',2,80),perms=validPermissions(body.permissions,ctx);
         const roleId=id();transaction(db,()=>{
           if(db.prepare('SELECT id FROM roles WHERE church_id=? AND name=?').get(churchId,name))fail(409,'A role with this name already exists.');
-          db.prepare('INSERT INTO roles VALUES(?,?,?,?,?)').run(roleId,churchId,name,null,JSON.stringify([...new Set(perms)]));
+          db.prepare('INSERT INTO roles(id,church_id,name,builtin,permissions) VALUES(?,?,?,?,?)').run(roleId,churchId,name,null,JSON.stringify(perms));
           audit(db,churchId,userId,'role.create',roleId,{name,permissions:perms});
         });return {status:201,data:{id:roleId}};
+      }
+      const roleRoute=tail.match(/^roles\/([a-f0-9]{32})$/);
+      if(roleRoute&&(method==='PATCH'||method==='DELETE')) {
+        context(db,churchId,userId,'roles.manage');
+        return {data:manageRole(db,churchId,userId,ctx,roleRoute[1],method,body)};
       }
       if(method==='GET' && tail==='team') {
         context(db,churchId,userId,'team.read');

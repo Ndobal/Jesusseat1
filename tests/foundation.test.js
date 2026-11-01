@@ -7,7 +7,8 @@ import { createHttpServer } from '../src/server.js';
 import { deliverMail } from '../src/mail.js';
 import { loadConfig } from '../src/config.js';
 import { backup } from 'node:sqlite';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -255,4 +256,137 @@ test('production sessions are Secure host-only cookies and cannot be used with d
  const login=await app({method:'POST',path:'/api/auth/login',body:{email:s.email,password:'A long test passphrase 123'},ip:'prod-test',headers:{origin:'https://church.example.test'}});
  assert.match(login.cookie,/^__Host-jesusseat=/);assert.match(login.cookie,/; Secure$/);assert.ok(!login.cookie.includes('Domain='));
  assert.equal((await app({method:'GET',path:'/api/me',headers:{cookie:s.cookie}})).status,401);
+});
+
+async function secondSession(h,s){
+ const r=await h.request('/api/auth/login','POST',{email:s.email,password:'A long test passphrase 123'});
+ assert.equal(r.status,undefined);return {cookie:r.cookie.split(';')[0],csrf:r.data.csrf,email:s.email};
+}
+test('session inventory is private and returns revocation handles rather than bearer credentials',async()=>{
+ const h=harness(),a=await h.register('sessions-a@example.test'),a2=await secondSession(h,a),b=await h.register('sessions-b@example.test');
+ const rows=(await h.request('/api/auth/sessions','GET',{},a)).data.sessions;
+ assert.equal(rows.length,2);assert.equal(rows.filter(r=>r.current).length,1);
+ const privateHashes=h.db.prepare('SELECT token_hash FROM sessions').all().map(r=>r.token_hash);
+ for(const row of rows){assert.equal(row.id.length,64);assert.ok(!privateHashes.includes(row.id));assert.ok(row.startedAt<row.expiresAt);assert.ok(!('csrf' in row));}
+ const other=(await h.request('/api/auth/sessions','GET',{},b)).data.sessions[0];
+ assert.equal((await h.request(`/api/auth/sessions/${other.id}`,'DELETE',{},a)).status,404);
+ const aOther=rows.find(r=>!r.current);
+ assert.equal((await h.request(`/api/auth/sessions/${aOther.id}`,'DELETE',{},a)).data.signedOut,false);
+ assert.equal((await h.request('/api/me','GET',{},a2)).status,401);
+ assert.equal((await h.request('/api/me','GET',{},a)).status,undefined);
+ assert.equal((await h.request('/api/me','GET',{},b)).status,undefined);
+});
+test('revoking the current session clears its cookie; revoke-others preserves other accounts',async()=>{
+ const h=harness(),a=await h.register('signouts@example.test'),a2=await secondSession(h,a),b=await h.register('unaffected@example.test');
+ assert.equal((await h.request('/api/auth/logout-others','POST',{},a)).data.count,1);
+ assert.equal((await h.request('/api/me','GET',{},a2)).status,401);
+ assert.equal((await h.request('/api/me','GET',{},b)).status,undefined);
+ const current=(await h.request('/api/auth/sessions','GET',{},a)).data.sessions[0];
+ const r=await h.request(`/api/auth/sessions/${current.id}`,'DELETE',{},a);assert.equal(r.data.signedOut,true);assert.match(r.cookie,/Max-Age=0/);
+ assert.equal((await h.request('/api/me','GET',{},a)).status,401);
+});
+test('password changes require the current password, rotate the session and invalidate resets',async()=>{
+ const h=harness(),a=await h.register('password-change@example.test'),a2=await secondSession(h,a);
+ await h.request('/api/auth/forgot','POST',{email:a.email});const token=h.lastToken(a.email,'reset');
+ assert.equal((await h.request('/api/auth/password','POST',{currentPassword:'wrong',password:'New long password value'},a)).status,403);
+ assert.equal((await h.request('/api/auth/password','POST',{currentPassword:'A long test passphrase 123',password:'short'},a)).status,400);
+ const r=await h.request('/api/auth/password','POST',{currentPassword:'A long test passphrase 123',password:'New long password value'},a);assert.equal(r.status,undefined);
+ const fresh={cookie:r.cookie.split(';')[0],csrf:r.data.csrf};assert.notEqual(fresh.cookie,a.cookie);assert.notEqual(fresh.csrf,a.csrf);
+ assert.equal((await h.request('/api/me','GET',{},a)).status,401);assert.equal((await h.request('/api/me','GET',{},a2)).status,401);
+ assert.equal((await h.request('/api/me','GET',{},fresh)).status,undefined);
+ assert.equal((await h.request('/api/auth/reset','POST',{token,password:'Another new password value'})).status,400);
+ assert.equal((await h.request('/api/auth/login','POST',{email:a.email,password:'New long password value'})).status,undefined);
+ const mail=h.db.prepare("SELECT * FROM outbox WHERE subject='Your JesusSeat password was changed'").get();assert.ok(mail);
+ assert.ok(!decrypt(mail.payload,outboxKey).includes('New long password value'));
+});
+test('concurrent password changes cannot both commit using the old credential',async()=>{
+ const h=harness(),a=await h.register('concurrent-password@example.test');
+ const responses=await Promise.all(['First new long passphrase','Second new long passphrase'].map(password=>h.request('/api/auth/password','POST',{currentPassword:'A long test passphrase 123',password},a)));
+ assert.equal(responses.filter(r=>r.status===undefined).length,1);
+ assert.equal(responses.filter(r=>r.status===409).length,1);
+ assert.equal(h.db.prepare('SELECT count(*) n FROM sessions').get().n,1);
+});
+test('password and session changes roll back if their audit record cannot commit',async()=>{
+ const h=harness(),a=await h.register('password-rollback@example.test'),a2=await secondSession(h,a);
+ const original=h.db.prepare('SELECT password_hash FROM users').get().password_hash;
+ h.db.exec("CREATE TRIGGER stop_security_audit BEFORE INSERT ON audit WHEN NEW.action IN ('account.password_change','account.other_sessions_revoke') BEGIN SELECT RAISE(ABORT,'forced'); END;");
+ assert.equal((await h.request('/api/auth/password','POST',{currentPassword:'A long test passphrase 123',password:'A replacement long password'},a)).status,500);
+ assert.equal(h.db.prepare('SELECT password_hash FROM users').get().password_hash,original);
+ assert.equal((await h.request('/api/auth/logout-others','POST',{},a)).status,500);
+ assert.equal((await h.request('/api/me','GET',{},a2)).status,undefined);
+ assert.equal(h.db.prepare("SELECT count(*) n FROM outbox WHERE subject='Your JesusSeat password was changed'").get().n,0);
+});
+test('custom role updates require current revision and confirm expanded access for members',async()=>{
+ const h=await inviteFixture(),base=`/api/churches/${h.c}`;
+ const roleId=(await h.request(`${base}/roles`,'POST',{name:'Communications assistant',permissions:['church.read']},h.owner)).data.id;
+ await h.request(`${base}/invitations`,'POST',{email:h.worker.email,role_id:roleId},h.owner);
+ await h.request('/api/invitations/accept','POST',{token:h.lastToken(h.worker.email,'invite')},h.worker);
+ let role=(await h.request(`${base}/roles`,'GET',{},h.owner)).data.roles.find(r=>r.id===roleId);
+ assert.equal(role.assigned_members,1);
+ const payload={name:'Communications lead',permissions:['church.read','media.manage'],version:role.version};
+ assert.equal((await h.request(`${base}/roles/${roleId}`,'PATCH',payload,h.owner)).status,409);
+ assert.equal((await h.request(`${base}/roles/${roleId}`,'PATCH',{...payload,confirmExpansion:true},h.owner)).status,undefined);
+ assert.ok((await h.request(base,'GET',{},h.worker)).data.permissions.includes('media.manage'));
+ assert.equal((await h.request(`${base}/roles/${roleId}`,'PATCH',{...payload,confirmExpansion:true},h.owner)).status,409);
+ role=(await h.request(`${base}/roles`,'GET',{},h.owner)).data.roles.find(r=>r.id===roleId);
+ assert.equal((await h.request(`${base}/roles/${roleId}`,'DELETE',{version:role.version},h.owner)).status,409);
+ assert.equal((await h.request(`${base}/roles/${roleId}`,'PATCH',{name:role.name,permissions:['church.read'],version:role.version},h.owner)).status,undefined);
+ assert.deepEqual((await h.request(base,'GET',{},h.worker)).data.permissions,['church.read']);
+});
+test('role expansion also accounts for pending invitations and does not alter built-ins',async()=>{
+ const h=await inviteFixture(),base=`/api/churches/${h.c}`;
+ const roleId=(await h.request(`${base}/roles`,'POST',{name:'Future media',permissions:['church.read']},h.owner)).data.id;
+ await h.request(`${base}/invitations`,'POST',{email:h.worker.email,role_id:roleId},h.owner);
+ const role=(await h.request(`${base}/roles`,'GET',{},h.owner)).data.roles.find(r=>r.id===roleId);
+ assert.equal(role.pending_invitations,1);
+ assert.equal((await h.request(`${base}/roles/${roleId}`,'PATCH',{name:role.name,permissions:['church.read','media.manage'],version:role.version},h.owner)).status,409);
+ const builtin=(await h.request(`${base}/roles`,'GET',{},h.owner)).data.roles.find(r=>r.builtin==='member');
+ assert.equal((await h.request(`${base}/roles/${builtin.id}`,'PATCH',{name:'Altered member',permissions:['church.read'],version:builtin.version},h.owner)).status,403);
+ assert.equal((await h.request(`${base}/roles/${builtin.id}`,'DELETE',{version:builtin.version},h.owner)).status,403);
+});
+test('archiving unused roles preserves invitation history and rejects reuse',async()=>{
+ const h=await inviteFixture(),base=`/api/churches/${h.c}`;
+ const roleId=(await h.request(`${base}/roles`,'POST',{name:'Temporary volunteer',permissions:['church.read']},h.owner)).data.id;
+ await h.request(`${base}/invitations`,'POST',{email:h.worker.email,role_id:roleId},h.owner);
+ const token=h.lastToken(h.worker.email,'invite'),inv=h.db.prepare('SELECT id FROM invitations WHERE token_hash=?').get(digest(token));
+ let role=(await h.request(`${base}/roles`,'GET',{},h.owner)).data.roles.find(r=>r.id===roleId);
+ assert.equal((await h.request(`${base}/roles/${roleId}`,'DELETE',{version:role.version},h.owner)).status,409);
+ await h.request(`${base}/invitations/${inv.id}`,'DELETE',{},h.owner);
+ assert.equal((await h.request(`${base}/roles/${roleId}`,'DELETE',{version:role.version},h.owner)).status,undefined);
+ assert.ok(h.db.prepare('SELECT archived_at FROM roles WHERE id=?').get(roleId).archived_at);
+ assert.ok(h.db.prepare('SELECT role_id FROM invitations WHERE id=?').get(inv.id));
+ assert.ok(!(await h.request(`${base}/roles`,'GET',{},h.owner)).data.roles.some(r=>r.id===roleId));
+ assert.equal((await h.request(`${base}/invitations`,'POST',{email:'another@example.test',role_id:roleId},h.owner)).status,400);
+ assert.equal((await h.request('/api/invitations/accept','POST',{token},h.worker)).status,400);
+});
+test('custom role edits block cross-church access, self-modification and audit failure',async()=>{
+ const h=await inviteFixture(),base=`/api/churches/${h.c}`;
+ const roleId=(await h.request(`${base}/roles`,'POST',{name:'Access coordinator',permissions:['church.read','team.read','roles.manage']},h.owner)).data.id;
+ await h.request(`${base}/invitations`,'POST',{email:h.worker.email,role_id:roleId},h.owner);
+ await h.request('/api/invitations/accept','POST',{token:h.lastToken(h.worker.email,'invite')},h.worker);
+ const role=(await h.request(`${base}/roles`,'GET',{},h.owner)).data.roles.find(r=>r.id===roleId);
+ const payload={name:'Renamed coordinator',permissions:role.permissions,version:role.version};
+ assert.equal((await h.request(`${base}/roles/${roleId}`,'PATCH',payload,h.worker)).status,403);
+ const stranger=await h.register('role-stranger@example.test'),other=await h.church(stranger,'another-church');
+ assert.equal((await h.request(`/api/churches/${other}/roles/${roleId}`,'PATCH',payload,stranger)).status,404);
+ h.db.exec("CREATE TRIGGER stop_role_audit BEFORE INSERT ON audit WHEN NEW.action='role.update' BEGIN SELECT RAISE(ABORT,'forced'); END;");
+ assert.equal((await h.request(`${base}/roles/${roleId}`,'PATCH',payload,h.owner)).status,500);
+ assert.equal(h.db.prepare('SELECT name FROM roles WHERE id=?').get(roleId).name,'Access coordinator');
+});
+test('opening a version-one database upgrades roles without losing records and is repeatable',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'jesusseat-upgrade-')),path=join(dir,'legacy.sqlite');
+ const legacy=new DatabaseSync(path);
+ legacy.exec(readFileSync(new URL('../src/schema.sql',import.meta.url),'utf8').replace(', archived_at INTEGER',''));
+ const uid=id(),cid=id(),rid=id();
+ legacy.prepare('INSERT INTO users(id,name,email,password_hash,created_at) VALUES(?,?,?,?,?)').run(uid,'Legacy user','legacy@example.test','test-only-unused',Date.now());
+ legacy.prepare('INSERT INTO churches(id,name,slug,structure,country,city,timezone,policy_version,accepted_by,accepted_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(cid,'Legacy church','legacy-church','independent','Nigeria','Abuja','Africa/Lagos',POLICY_VERSION,uid,Date.now(),Date.now());
+ legacy.prepare('INSERT INTO roles VALUES(?,?,?,?,?)').run(rid,cid,'Legacy custom',null,'["church.read"]');legacy.close();
+ try{
+   for(let i=0;i<2;i++){
+     const upgraded=openDatabase(path);
+     assert.equal(upgraded.prepare('SELECT name,archived_at FROM roles WHERE id=?').get(rid).name,'Legacy custom');
+     assert.equal(upgraded.prepare('SELECT max(version) version FROM schema_migrations').get().version,2);
+     assert.equal(upgraded.prepare('SELECT count(*) n FROM churches').get().n,1);upgraded.close();
+   }
+ }finally{rmSync(dir,{recursive:true,force:true});}
 });

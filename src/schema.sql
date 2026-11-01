@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS branches (
 CREATE INDEX IF NOT EXISTS branch_church ON branches(church_id);
 CREATE TABLE IF NOT EXISTS roles (
  id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id),
- name TEXT NOT NULL, builtin TEXT, permissions TEXT NOT NULL,
+ name TEXT NOT NULL, builtin TEXT, permissions TEXT NOT NULL, archived_at INTEGER,
  UNIQUE(church_id,id), UNIQUE(church_id,name)
 );
 CREATE TABLE IF NOT EXISTS memberships (
