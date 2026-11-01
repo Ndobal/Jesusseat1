@@ -14,7 +14,7 @@ This is a new implementation, not a claim to have repaired or inspected the inac
 1. Platform public site: Home, About, Vision, Mission, Features, Templates, optional Church Directory, Donate, Contact, Help, Terms, Statement of Faith, Privacy. Each page has its own address.
 2. Super admin: church/member counts with defined scopes; platform donation reconciliation; onboarding; support inbox and public enquiries; suspension/review/restoration; domains and integration health; configuration and audit. No automatic access to confidential pastoral records.
 3. Church workspace: profile, hierarchy, people, ministry, communications, website/content, finance, operational resources and reports.
-4. Member portal: verified identity; own records and authorised household access; events, groups, duties, receipts and care requests.
+4. Member services: verified receipt submissions, event/prayer/contact forms and scoped project conversations, without an individual member dashboard. Individual church dashboards belong only to appointed workers.
 
 ### Church website content model (Phase 4 target)
 
@@ -59,7 +59,7 @@ Roles never carry platform authority. Branch scope includes that branch and desc
 
 ## Permissions and responsibilities
 
-Built-ins: Church administrator, Pastor, Secretary, Media team, Treasurer, Attendance officer, Member. Custom roles select from server-known permissions and cannot exceed the creator's permissions. Church-wide administration is necessary for settings, role creation and full audit access. Only a church-wide built-in administrator can appoint another church administrator. Existing administrators cannot remove/demote themselves through this UI. Keep at least one administrator. Built-in roles cannot be edited or deleted in this release. Branch parents cannot be reparented, so the add-only hierarchy cannot acquire cycles.
+Built-ins: Church administrator, Pastor, Secretary, Media team, Treasurer, Attendance officer, Head usher, Usher, Project coordinator, Department leader, Member. The Member role holds no church workspace/dashboard access; custom roles are worker appointments. Custom roles select from server-known permissions and cannot exceed the creator's permissions. Church-wide administration is necessary for settings, role creation and full audit access. Only a church-wide built-in administrator can appoint another church administrator, pastor or head usher. Existing administrators cannot remove/demote themselves through this UI. Keep at least one administrator. Built-in roles cannot be edited or deleted in this release. Branch parents cannot be reparented, so the add-only hierarchy cannot acquire cycles.
 
 Future module permissions (`finance.manage`, `care.manage`, etc.) are reserved for future enforcement, not evidence that those modules exist. A registered church admin does not become a platform super admin.
 
@@ -87,12 +87,16 @@ The initial participation draft requires sound biblical teaching, honest represe
 3. Platform public site, contact intake, policy pages and help structure.
 4. Five church templates, page/content management, revision history, accessibility, publishing and free addresses.
 5. Members/households/visitors, imports, duplicate review and follow-up.
-6. Attendance, groups, pastoral care, welfare and children's safeguarding/check-in.
+6. Ushers’ attendance corner, service reports, count review/corrections, groups, pastoral care, welfare and children’s safeguarding/check-in.
 7. Facebook/YouTube embeds and authorised media connections; no native streaming.
-8. Church finances/giving, approvals/reconciliation and separate platform donations.
-9. Events, worship planning, discipleship, volunteers/staff, facilities/assets.
-10. Member portal and communications with usage controls.
+8. Ushers’ giving records, private transfer-receipt review, confidential tithes, separate gateway/manual totals, project contributions/correction conversations, approvals/reconciliation and separate platform donations.
+9. Department/worker reviews and moderated feedback, active/completed projects, coordinator tasks, ministers’/workers’ rosters, weekly activities, Open Heavens/devotionals, events, worship planning, discipleship, volunteers/staff and facilities/assets.
+10. Focused member services and verified submission/conversation access without member dashboards; worker communications and reminders with consent/usage controls.
 11. Custom domains/Webnoryx, full super-admin/support and suspension workflows.
 12. Church pilot, security/accessibility/performance checks, policy completion, backup recovery and launch.
 
 Each later phase must include UI, storage, server permissions, audit, failure handling, and meaningful tests. Do not add fake member counts, invented payments, nonfunctional purchase buttons or placeholder production secrets.
+
+## Expanded church workflows
+
+The owner’s worker-dashboard, ushering, confidential tithe, receipt, project, department, roster and devotional requirements are specified in [CHURCH-WORKFLOWS.md](CHURCH-WORKFLOWS.md), including the phase mapping, access matrix, reconciliation rules and acceptance tests. This supersedes earlier references to a general member portal. Only the head usher, church administrator and pastor may view identified tithe amounts within their church/branch scope. Gateway and confirmed manual payments are separate sources with a combined total; unverified receipt claims and duplicate matches are excluded.

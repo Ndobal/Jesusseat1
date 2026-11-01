@@ -6,7 +6,7 @@ The Phase 3 implementation adds JesusSeat’s public platform site to the existi
 
 - Independent server-rendered Home, About, Vision, Mission, Features, Templates, Churches, Donate, Contact, Help, Terms, Privacy and Statement of Faith pages.
 - Five distinct desktop/mobile design previews, each with its own detail page. These are illustrative concepts; selecting a preference in Church profile is already supported. Content editing, revision history and tenant publication belong to Phase 4.
-- Eight searchable help guides, with their own URLs and related links. Features explicitly distinguishes current capabilities from planned modules.
+- Searchable help guides, with their own URLs and related links. Features explicitly distinguishes current capabilities from planned modules.
 - Responsive forest-green, ivory and gold presentation, original illustrative church imagery, compressed WebP assets, native mobile navigation, labelled forms, skip navigation, visible focus and reduced-motion support. No external font, analytics or player loads.
 - Canonical URLs, page titles/descriptions, social metadata, robots.txt and a sitemap. Private application pages use noindex. Public directory routes enter the sitemap only when published and active.
 - Contact intake with durable acknowledgement, encrypted message bodies, versioned privacy consent, one-use 30-minute form tokens, a short minimum completion time, honeypot, bounded input and persisted rate limits. Both JavaScript submission and a native HTML fallback work.
@@ -43,8 +43,10 @@ Policies carry a short **Policy draft** status. Public copy uses direct visitor-
 
 ## Verification and remaining gates
 
-Validation passed: `npm run check` and all **69 automated tests** (47 foundation, 22 public-platform tests). Run the same commands when continuing. Public tests cover routes/metadata, asset responses, native contact submission, nonce/consent/abuse checks, encryption, access boundaries, transactional rollback, reply conflicts, directory opt-in/withdrawal, suspension, tenant/branch limits, safe links, literal searches, escaping and checkout states. The foundation migration fixture verifies repeatable upgrades from version one.
+Validation passed: `npm run check` and all **75 automated tests** (47 foundation, 22 public-platform and 6 worker-access tests). Run the same commands when continuing. Public tests cover routes/metadata, asset responses, native contact submission, nonce/consent/abuse checks, encryption, access boundaries, transactional rollback, reply conflicts, directory opt-in/withdrawal, suspension, tenant/branch limits, safe links, literal searches, escaping and checkout states. The foundation migration fixture verifies repeatable upgrades from version one.
 
 Managed-browser visual inspection covered the homepage, template gallery, design detail, Contact, plus mobile layout inspection. Automated tests use synthetic in-memory data. Real provider email, payment checkout ownership, authenticated inbox/directory browser acceptance, independent accessibility/security review and production hosting remain launch gates. The GitHub account’s previously reported billing lock may prevent hosted CI from starting; local results are separate evidence.
 
 Next: Phase 4 builds five real tenant templates, independent church page routing, content editing, revisions, preview and publication with safe public projections. Webnoryx domains, full super-admin suspension/support tooling and payments stay in their later phases. Phase 7 remains Facebook/YouTube embedding only; native streaming is deferred.
+
+Worker-access continuation: migration five and the expanded role/dashboard rules are documented in CHURCH-WORKFLOWS.md. Ordinary members retain focused services without a church dashboard.

@@ -26,6 +26,12 @@ Phase 1 engineering planning is now closed. See PHASE-1-CLOSEOUT.md for evidence
 
 Public platform pages, five illustrative design concepts, searchable help, draft policy pages, durable encrypted contact enquiries, a host-granted MFA-protected platform inbox, opt-in public church listings, SEO metadata and an optional hosted checkout link are implemented. See PHASE-3.md for scope, operator setup and acceptance evidence. Migration four preserves existing records and acceptances.
 
+## Worker-access continuation implemented
+
+Ordinary member roles are denied church-workspace API access and omitted from the workspace chooser. Member invitations confirm membership without opening a worker dashboard. New and existing churches receive Head usher, Usher, Project coordinator and Department leader roles; migration five preserves assignments/custom-name collisions and records role bootstrap audit. Only church-wide built-in administrators can appoint pastors, head ushers or other administrators. Existing custom roles represent worker appointments. No finance/project/review/roster module is claimed complete.
+
+See CHURCH-WORKFLOWS.md for the expanded requirements and phase assignments. It supersedes earlier member-dashboard/portal plans. Phase 6 adds attendance, Phase 8 giving/receipts/project-payment reconciliation, Phase 9 departments/projects/rosters/devotionals and Phase 10 focused member services. Do not grant tithe identity/amount access through generic finance or platform permissions.
+
 ## Scope exclusions / limitations
 
 - Final doctrine/legal policy approval is pending. Current acceptance is explicitly a draft.
@@ -35,7 +41,7 @@ Public platform pages, five illustrative design concepts, searchable help, draft
 - Custom roles can be edited and archived with safeguards; standard roles remain immutable. Archiving requires no assigned members or pending active invitations.
 - No real church/member data was imported; tests use synthetic fixtures only.
 - This is Node + persistent SQLite, not a Worker application. Revisit ADR-001 if Cloudflare-only hosting becomes a requirement.
-- Phase 4 editable/published church websites, member registry, finance/payment processing, member portal, custom domains and the full super-admin console remain later work. Phase 3 includes only the limited platform contact inbox.
+- Phase 4 editable/published church websites, member registry, finance/payment processing, focused member services, custom domains and the full super-admin console remain later work. Phase 3 includes only the limited platform contact inbox.
 - **Native streaming is out of scope.** Phase 7 uses Facebook/YouTube embeds only. Do not implement native ingestion/recording or cloud streaming billing during this release.
 
 ## Next

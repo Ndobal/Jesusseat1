@@ -29,7 +29,8 @@ npm test
 - Optional authenticator-app verification, one-use recovery codes and protected two-step sign-in.
 - Church registration and a guided setup checklist.
 - Independent churches, branch networks and denominations.
-- Church isolation, branch scopes, built-in/custom roles and team invitations.
+- Worker-only church dashboards, branch scopes, built-in/custom roles and team invitations.
+- Head usher, usher, project coordinator and department leader role foundations.
 - Version-checked custom-role edits, expansion confirmation and safe role archival.
 - Church profiles, template preference and multiple visions/missions.
 - Append-only activity history and atomic audit for important changes.
@@ -43,6 +44,7 @@ npm test
 - [Phase 1 review and complete project specification](docs/PHASE-1.md)
 - [Phase 1 closeout](docs/PHASE-1-CLOSEOUT.md)
 - [Phase 2 implementation and acceptance checklist](docs/PHASE-2.md)
+- [Expanded church workflows and phase mapping](docs/CHURCH-WORKFLOWS.md)
 - [Phase 3 public website and acceptance checklist](docs/PHASE-3.md)
 - [Two-step verification and recovery](docs/TWO-STEP-VERIFICATION.md)
 - [API and permissions](docs/API.md)

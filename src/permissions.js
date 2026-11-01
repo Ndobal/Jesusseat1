@@ -7,7 +7,11 @@ export const BUILTINS = {
   media: { name:'Media team', permissions:['church.read','website.manage','media.manage'] },
   treasurer: { name:'Treasurer', permissions:['church.read','finance.manage'] },
   attendance: { name:'Attendance officer', permissions:['church.read','attendance.manage'] },
-  member: { name:'Member', permissions:['church.read'] }
+  head_usher: { name:'Head usher', permissions:['church.read','attendance.manage'] },
+  usher: { name:'Usher', permissions:['church.read','attendance.manage'] },
+  project_coordinator: { name:'Project coordinator', permissions:['church.read'] },
+  department_leader: { name:'Department leader', permissions:['church.read'] },
+  member: { name:'Member', permissions:[] }
 };
 export function context(db, churchId, userId, permission = 'church.read') {
   const row = db.prepare(`SELECT m.*, r.permissions,r.builtin,c.status FROM memberships m
@@ -15,6 +19,7 @@ export function context(db, churchId, userId, permission = 'church.read') {
     WHERE m.church_id=? AND m.user_id=? AND r.archived_at IS NULL`).get(churchId,userId);
   if (!row) fail(404,'Church workspace not found.');
   if (row.status !== 'active') fail(403,'This church workspace is suspended.');
+  if (row.builtin === 'member') fail(403,'A worker role is required to open this church workspace.');
   row.permissions = JSON.parse(row.permissions);
   if (!row.permissions.includes(permission)) fail(403,'You do not have permission for this action.');
   return row;

@@ -34,7 +34,7 @@ function fixture(t,options={}) {
  return {db,config,request,user,nonce,contact,church,listing};
 }
 
-test('all public pages, five designs and eight guides render independent SEO metadata',t=>{
+test('all public pages, five designs and help guides render independent SEO metadata',t=>{
  const h=fixture(t),paths=[...PUBLIC_PATHS,...TEMPLATE_DETAILS.map(x=>`/templates/${x.id}`),...HELP.map(x=>`/help/${x.slug}`)];
  for(const path of paths){const page=renderPublicPage({path,db:h.db,config:h.config});assert.match(page,/<h1>/);assert.match(page,/<title>.+JesusSeat/);assert.ok(page.includes(`rel="canonical" href="${origin}${path}"`));assert.match(page,/Ndovera Limited/);assert.match(page,/name="description"/);}
  assert.equal(renderPublicPage({path:'/help/unknown',db:h.db,config:h.config}),null);

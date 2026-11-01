@@ -49,7 +49,7 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
   const mfa=createMfa({db,key:outboxKey,origin,production,sessionFor,queueMail});
   const publicServices=createPublicServices({db,key:outboxKey,origin,queueMail,notificationEmail});
   function canAssign(ctx,role) {
-    if (role.builtin==='church_admin' && (ctx.builtin!=='church_admin'||ctx.branch_id)) fail(403,'Only a church-wide administrator can assign administrators.');
+    if (['church_admin','pastor','head_usher'].includes(role.builtin) && (ctx.builtin!=='church_admin'||ctx.branch_id)) fail(403,'Only a church-wide administrator can assign this leadership role.');
     if (!JSON.parse(role.permissions).every(p=>ctx.permissions.includes(p))) fail(403,'You cannot grant permissions you do not hold.');
   }
   function roleFor(churchId,roleId) {
@@ -147,7 +147,7 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
       }
       const s=auth(req),userId=s.user_id;
       if(method==='GET' && path==='/api/me') {
-        const churches=db.prepare(`SELECT c.id,c.name,c.slug,c.status,r.name role,m.branch_id FROM churches c JOIN memberships m ON m.church_id=c.id JOIN roles r ON r.id=m.role_id WHERE m.user_id=? ORDER BY c.name`).all(userId);
+        const churches=db.prepare(`SELECT c.id,c.name,c.slug,c.status,r.name role,m.branch_id FROM churches c JOIN memberships m ON m.church_id=c.id JOIN roles r ON r.id=m.role_id AND r.church_id=m.church_id WHERE m.user_id=? AND r.archived_at IS NULL AND (r.builtin IS NULL OR r.builtin<>'member') ORDER BY c.name`).all(userId);
         return {data:{user:{id:userId,name:s.name,email:s.email,verified:!!s.verified_at},csrf:s.csrf,churches,platformAdmin:!!db.prepare('SELECT user_id FROM platform_admins WHERE user_id=?').get(userId)}};
       }
       if(method==='GET'&&path==='/api/platform/enquiries')return {data:publicServices.inbox(s,req.query)};
@@ -213,17 +213,20 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
       }
       if(method==='POST' && path==='/api/invitations/accept') {
         const token=text(body.token,'Invitation token',30,100);
-        let churchId;
+        let churchId,workspaceAccess;
         transaction(db,()=>{
           const inv=db.prepare('SELECT i.* FROM invitations i JOIN churches c ON c.id=i.church_id JOIN roles r ON r.id=i.role_id AND r.church_id=i.church_id WHERE i.token_hash=? AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>? AND c.status=\'active\' AND r.archived_at IS NULL').get(digest(token),Date.now());
           if(!inv) fail(400,'This invitation is unavailable, expired or already accepted.');
           if(inv.email!==s.email) fail(403,'Sign in with the email address this invitation was sent to.');
+          const invitedRole=roleFor(inv.church_id,inv.role_id);
+          if(['church_admin','pastor','head_usher'].includes(invitedRole.builtin)) canAssign(context(db,inv.church_id,inv.invited_by,'team.manage'),invitedRole);
           if(db.prepare('SELECT id FROM memberships WHERE church_id=? AND user_id=?').get(inv.church_id,userId)) fail(409,'You already belong to this church.');
           db.prepare('INSERT INTO memberships VALUES(?,?,?,?,?,?)').run(id(),inv.church_id,userId,inv.role_id,inv.branch_id,Date.now());
           db.prepare('UPDATE invitations SET accepted_at=? WHERE id=?').run(Date.now(),inv.id);
           audit(db,inv.church_id,userId,'invitation.accept',inv.id); churchId=inv.church_id;
+          workspaceAccess=db.prepare('SELECT builtin FROM roles WHERE id=? AND church_id=?').get(inv.role_id,inv.church_id).builtin!=='member';
         });
-        return {data:{churchId}};
+        return {data:{churchId,workspaceAccess}};
       }
       const match=path.match(/^\/api\/churches\/([a-f0-9]{32})(?:\/(.*))?$/);
       if(!match) fail(404,'Endpoint not found.');
@@ -233,7 +236,7 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
       if(method==='PATCH'&&tail==='directory')return {data:publicServices.saveDirectory(s,churchId,body)};
       if(method==='GET' && !tail) {
         const c=db.prepare('SELECT * FROM churches WHERE id=?').get(churchId);
-        return {data:{church:c,permissions:ctx.permissions,scope:ctx.branch_id,onboarding:ctx.branch_id?[]:onboarding(churchId),branches:branchesInScope(db,churchId,ctx)}};
+        return {data:{church:c,permissions:ctx.permissions,workerRole:ctx.builtin,scope:ctx.branch_id,onboarding:ctx.branch_id?[]:onboarding(churchId),branches:branchesInScope(db,churchId,ctx)}};
       }
       if(method==='PATCH' && !tail) {
         context(db,churchId,userId,'church.manage'); requireGlobal(ctx);
