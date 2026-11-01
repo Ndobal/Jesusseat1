@@ -22,6 +22,10 @@ Phase 1 engineering planning is now closed. See PHASE-1-CLOSEOUT.md for evidence
 - Transactional version-two role migration, tested against an existing version-one database.
 - Optional authenticator MFA with session-bound enrollment, password-stage challenges, replay prevention and one-use recovery codes; version-three security tables.
 
+## Phase 3 implemented
+
+Public platform pages, five illustrative design concepts, searchable help, draft policy pages, durable encrypted contact enquiries, a host-granted MFA-protected platform inbox, opt-in public church listings, SEO metadata and an optional hosted checkout link are implemented. See PHASE-3.md for scope, operator setup and acceptance evidence. Migration four preserves existing records and acceptances.
+
 ## Scope exclusions / limitations
 
 - Final doctrine/legal policy approval is pending. Current acceptance is explicitly a draft.
@@ -31,9 +35,9 @@ Phase 1 engineering planning is now closed. See PHASE-1-CLOSEOUT.md for evidence
 - Custom roles can be edited and archived with safeguards; standard roles remain immutable. Archiving requires no assigned members or pending active invitations.
 - No real church/member data was imported; tests use synthetic fixtures only.
 - This is Node + persistent SQLite, not a Worker application. Revisit ADR-001 if Cloudflare-only hosting becomes a requirement.
-- Phase 3 full platform pages, Phase 4 templates/publishing/domains, member registry, finance, payments, member portal and super-admin UI are not built.
+- Phase 4 editable/published church websites, member registry, finance/payment processing, member portal, custom domains and the full super-admin console remain later work. Phase 3 includes only the limited platform contact inbox.
 - **Native streaming is out of scope.** Phase 7 uses Facebook/YouTube embeds only. Do not implement native ingestion/recording or cloud streaming billing during this release.
 
 ## Next
 
-Continue Phase 2 verification using PHASE-2.md, particularly authenticated browser acceptance and real-provider/hosting setup when credentials are supplied. Phase 1 planning need not be restarted. Start Phase 3 only as the next explicitly selected build phase, using the existing account/tenant API. Design public publishing with separate publication projections: never expose the private church API on public tenant pages. Keep contact/support records isolated and sensitive ministry permissions independent. When adding payment callbacks, use verified signatures, idempotency and ledger reconciliation rather than browser success redirects. New feature mutations must share a transaction with their audit record.
+Phase 3 engineering is implemented; complete its live-provider and owner-policy launch gates before production. Begin Phase 4 when selected, using the public projection boundary rather than exposing tenant workspace APIs. Build real church template layouts, independent page routing, content editing, revision history, previews, safe asset uploads and explicit publishing. Keep native streaming deferred. Domains/Webnoryx, donation ledgers and full platform suspension/support workflows remain in their assigned later phases.

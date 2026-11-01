@@ -1,4 +1,4 @@
-# Phase 2 API
+# API — foundation and public platform
 
 JSON API, same origin only. Mutations require `Content-Type: application/json` and `Origin: APP_ORIGIN`. Authenticated mutations also need `X-CSRF-Token` from `/api/me`. The session is an HttpOnly cookie; never persist it in JavaScript storage. Production cookie is `__Host-jesusseat; Secure; HttpOnly; SameSite=Lax; Path=/`.
 
@@ -58,3 +58,22 @@ Role GET returns an opaque version for optimistic concurrency, member/pending-in
 ### MFA login contract
 
 When two-step verification is enabled, successful `/api/auth/login` returns `{mfaRequired:true,csrf}` and an **MFA challenge cookie**, not a full session. The client visits `/mfa`, loads the challenge CSRF and submits the factor to `/api/auth/mfa/login`. That response sets two distinct cookies: the ordinary session and the expired challenge cookie. Password recovery preserves MFA. No API accepts a client-supplied user ID to modify another person's factors. See TWO-STEP-VERIFICATION.md for expiry/replay/recovery details.
+
+## Phase 3 public site and enquiries
+
+Public HTML routes: `/`, `/about`, `/vision`, `/mission`, `/features`, `/templates`, `/templates/:design`, `/churches`, `/churches/:publishedSlug`, `/donate`, `/contact`, `/help`, `/help/:article`, `/terms`, `/privacy`, `/statement-of-faith`. Each is server-rendered. `/participation` permanently redirects to `/terms`. Unknown or unpublished detail paths return 404. `/robots.txt` and `/sitemap.xml` cover the public projection; private HTML uses noindex.
+
+| Method and endpoint | Access and behavior |
+| --- | --- |
+| `GET /api/public/contact-token` | Anonymous; returns one-use `nonce`, expires in 30 minutes. |
+| `POST /api/public/contact` | Anonymous with same-origin JSON; name, email, topic, subject, message, nonce, boolean consent, current privacyVersion; optional website honeypot must be blank. Returns 202 with a durable reference. |
+| `POST /contact` | Native same-origin URL-encoded HTML form fallback; same validation and acknowledgement. |
+| `GET /api/public/churches?q=&page=1` | Anonymous; active, opted-in church introductions, 12 per page. Search treats wildcards literally. |
+| `GET /api/churches/:id/directory` | Verified member, church.manage and whole-church scope; returns listing, version 0 when absent. |
+| `PATCH /api/churches/:id/directory` | Same permission plus CSRF; summary, website_url (optional HTTPS), boolean published, version. Stale writes return 409. |
+| `GET /api/platform/enquiries?status=new&page=1` | Explicit platform grant, verified email and enabled MFA; statuses new/open/resolved/all, 25 per page. Metadata only. |
+| `GET /api/platform/enquiries/:id` | Same platform requirements; decrypted message and reply history. |
+| `PATCH /api/platform/enquiries/:id` | Same access plus CSRF; status and current version; atomic audit. |
+| `POST /api/platform/enquiries/:id/replies` | Same access plus CSRF; message, current version and optional resolve boolean; returns 201 after reply, mail and audit commit. |
+
+`/api/me` includes a platformAdmin UI hint; every protected enquiry route independently enforces access. There is no browser/API grant endpoint. Grant/revoke through the host CLI only after account verification and MFA enrollment. Public contact acknowledgement confirms database receipt, not outbound email delivery. Replies use the existing encrypted outbox and provider retry worker. No payment API, donor ledger or Webnoryx/domain API is added in this phase.

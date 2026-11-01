@@ -11,6 +11,7 @@ export function openDatabase(path) {
     if (!db.prepare('PRAGMA table_info(roles)').all().some(column => column.name === 'archived_at')) db.exec('ALTER TABLE roles ADD COLUMN archived_at INTEGER');
     db.prepare('INSERT OR IGNORE INTO schema_migrations VALUES(2,?)').run(Date.now());
     db.prepare('INSERT OR IGNORE INTO schema_migrations VALUES(3,?)').run(Date.now());
+    db.prepare('INSERT OR IGNORE INTO schema_migrations VALUES(4,?)').run(Date.now());
   });
   return db;
 }

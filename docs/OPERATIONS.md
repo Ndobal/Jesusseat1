@@ -74,3 +74,13 @@ GitHub Actions initially could not start jobs because GitHub reported an account
 Startup now creates the MFA enrollment, challenge, encrypted-secret and recovery-digest tables and records schema version three. Schema creation and upgrade markers run inside one transaction. Take a backup before upgrading; restore against a copy to verify the encryption key. `OUTBOX_KEY` must remain stable after authenticator enrollment as well as while mail is queued. Neither the setup key nor recovery values may be sent to an external QR generator, added to logs or placed in analytics. Keep the server clock synchronised.
 
 The production app intentionally has no unauthenticated MFA-disable route and email recovery does not bypass a factor. Resolve and document the owner-approved account-recovery policy before onboarding real churches; an operator should not improvise a database edit in response to an unverified support request.
+
+## Phase 3 public website and inbox
+
+Startup creates migration-four tables without changing existing church acceptance records. Back up first. Deploy the complete `public/` directory, including six WebP files, and the new source modules. Existing Docker packaging already includes those directories. The root URL now serves the public platform site; private workspaces remain at `/app`.
+
+After registering and verifying an operator account and enabling its authenticator, grant only the intended operator using `npm run admin -- grant operator@example.com`. Review grants with `npm run admin -- list`, revoke with `npm run admin -- revoke operator@example.com`. The inbox lives at `/platform/inbox`; ordinary church administrators cannot open it. Host access is itself privileged and must be tightly restricted. These commands have not been run against any real operator account by this build.
+
+`PLATFORM_NOTIFICATION_EMAIL` optionally enables minimal alerts; blank leaves enquiries available in the inbox. Provider email must be tested for actual reply delivery. Contact messages and replies are encrypted with the stable `OUTBOX_KEY`; names, email addresses and subjects are access-controlled plaintext metadata. Include enquiry records in approved retention/deletion and backup policy before launch. Do not use inbox status as a delivery receipt.
+
+Leave `DONATION_CHECKOUT_URL` and `DONATION_PROVIDER_LABEL` blank until Ndovera Limited has approved and verified a hosted checkout. Configure both to expose an external payment link. This does not enable accounting, receipts, automatic donor identification or payment callbacks. Final policy/faith wording and production deployment particulars need owner review. See PHASE-3.md for exact scope and verification.

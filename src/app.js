@@ -4,8 +4,10 @@ import { PERMISSIONS, BUILTINS, context, requireGlobal, branchesInScope, checkBr
 import { listSessions, revokeSession, revokeOtherSessions, changePassword } from './account-security.js';
 import { roleVersion, validPermissions, manageRole } from './role-management.js';
 import { createMfa } from './mfa.js';
+import { createPublicServices, contactToken, directoryList } from './public-services.js';
+import { PUBLIC_POLICY_VERSION } from './public-data.js';
 
-export const POLICY_VERSION='2026-11-01-draft-1';
+export const POLICY_VERSION=PUBLIC_POLICY_VERSION;
 export const TEMPLATES=['welcome-home','living-faith','grace-heritage','open-doors','the-gathering'];
 const HOUR=3600_000, DAY=24*HOUR;
 const optional=(v,label,max=200)=>v===undefined || v==='' ? '' : text(v,label,0,max);
@@ -14,7 +16,7 @@ function cookieValue(header,name) {
   return value?.slice(name.length+1) || '';
 }
 
-export function createApp({db,origin,production=false,outboxKey}) {
+export function createApp({db,origin,production=false,outboxKey,notificationEmail}) {
   if (!outboxKey) throw new Error('An outbox encryption key is required');
   const cookieName=production?'__Host-jesusseat':'jesusseat';
   const dummyHash=hashPassword(secret());
@@ -45,6 +47,7 @@ export function createApp({db,origin,production=false,outboxKey}) {
   }
   function verified(session) { if (!session.verified_at) fail(403,'Verify your email before creating or joining a church.'); }
   const mfa=createMfa({db,key:outboxKey,origin,production,sessionFor,queueMail});
+  const publicServices=createPublicServices({db,key:outboxKey,origin,queueMail,notificationEmail});
   function canAssign(ctx,role) {
     if (role.builtin==='church_admin' && (ctx.builtin!=='church_admin'||ctx.branch_id)) fail(403,'Only a church-wide administrator can assign administrators.');
     if (!JSON.parse(role.permissions).every(p=>ctx.permissions.includes(p))) fail(403,'You cannot grant permissions you do not hold.');
@@ -72,8 +75,11 @@ export function createApp({db,origin,production=false,outboxKey}) {
         if (headers.origin!==origin) fail(403,'Request origin is not allowed.');
         rateLimit(db,`write:${digest(ip)}`,250);
       }
-      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.2.2'}};
+      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.3.0'}};
       if (method==='GET' && path==='/api/config') return {data:{policyVersion:POLICY_VERSION,templates:TEMPLATES,permissions:PERMISSIONS,operator:'Ndovera Limited'}};
+      if(method==='GET'&&path==='/api/public/churches')return {data:directoryList(db,req.query)};
+      if(method==='GET'&&path==='/api/public/contact-token')return {data:{nonce:contactToken(db,ip)}};
+      if(method==='POST'&&path==='/api/public/contact')return {status:202,data:publicServices.submitContact(body,ip)};
       if (method==='POST' && path==='/api/auth/register') {
         rateLimit(db,`register:${digest(ip)}`,8,HOUR);
         const address=email(body.email),name=text(body.name,'Name',2,100),hash=await hashPassword(password(body.password));
@@ -142,7 +148,14 @@ export function createApp({db,origin,production=false,outboxKey}) {
       const s=auth(req),userId=s.user_id;
       if(method==='GET' && path==='/api/me') {
         const churches=db.prepare(`SELECT c.id,c.name,c.slug,c.status,r.name role,m.branch_id FROM churches c JOIN memberships m ON m.church_id=c.id JOIN roles r ON r.id=m.role_id WHERE m.user_id=? ORDER BY c.name`).all(userId);
-        return {data:{user:{id:userId,name:s.name,email:s.email,verified:!!s.verified_at},csrf:s.csrf,churches}};
+        return {data:{user:{id:userId,name:s.name,email:s.email,verified:!!s.verified_at},csrf:s.csrf,churches,platformAdmin:!!db.prepare('SELECT user_id FROM platform_admins WHERE user_id=?').get(userId)}};
+      }
+      if(method==='GET'&&path==='/api/platform/enquiries')return {data:publicServices.inbox(s,req.query)};
+      const enquiryRoute=path.match(/^\/api\/platform\/enquiries\/([a-f0-9]{32})(\/replies)?$/);
+      if(enquiryRoute){
+        if(method==='GET'&&!enquiryRoute[2])return {data:publicServices.enquiry(s,enquiryRoute[1])};
+        if(method==='PATCH'&&!enquiryRoute[2])return {data:publicServices.updateEnquiry(s,enquiryRoute[1],body)};
+        if(method==='POST'&&enquiryRoute[2])return {status:201,data:publicServices.reply(s,enquiryRoute[1],body)};
       }
       if(method==='POST' && path==='/api/auth/logout') {
         db.prepare('DELETE FROM sessions WHERE token_hash=?').run(s.token_hash);
@@ -216,6 +229,8 @@ export function createApp({db,origin,production=false,outboxKey}) {
       if(!match) fail(404,'Endpoint not found.');
       const churchId=match[1],tail=match[2]||'';
       const ctx=context(db,churchId,userId);
+      if(method==='GET'&&tail==='directory')return {data:publicServices.directorySettings(s,churchId)};
+      if(method==='PATCH'&&tail==='directory')return {data:publicServices.saveDirectory(s,churchId,body)};
       if(method==='GET' && !tail) {
         const c=db.prepare('SELECT * FROM churches WHERE id=?').get(churchId);
         return {data:{church:c,permissions:ctx.permissions,scope:ctx.branch_id,onboarding:ctx.branch_id?[]:onboarding(churchId),branches:branchesInScope(db,churchId,ctx)}};

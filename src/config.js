@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { secret } from './security.js';
+import { safeExternalUrl } from './public-services.js';
 
 export function loadConfig(env=process.env) {
   const production=env.NODE_ENV==='production',origin=env.APP_ORIGIN||'http://127.0.0.1:3000';
@@ -17,5 +18,10 @@ export function loadConfig(env=process.env) {
     if(!existsSync(keyPath))writeFileSync(keyPath,secret(),{mode:0o600,flag:'wx'});
     outboxKey=readFileSync(keyPath,'utf8').trim();
   }
-  return {production,origin,databasePath,outboxKey,host:env.HOST||'127.0.0.1',port:Number(env.PORT||3000),mailKey:env.MAIL_API_KEY,mailFrom:env.MAIL_FROM};
+  const donationUrl=safeExternalUrl(env.DONATION_CHECKOUT_URL||'');
+  const donationLabel=(env.DONATION_PROVIDER_LABEL||'').trim();
+  if(donationUrl&&(!donationLabel||donationLabel.length>80))throw new Error('Set DONATION_PROVIDER_LABEL when enabling a checkout link');
+  const notificationEmail=(env.PLATFORM_NOTIFICATION_EMAIL||'').trim();
+  if(notificationEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail))throw new Error('Invalid PLATFORM_NOTIFICATION_EMAIL');
+  return {production,origin,databasePath,outboxKey,host:env.HOST||'127.0.0.1',port:Number(env.PORT||3000),mailKey:env.MAIL_API_KEY,mailFrom:env.MAIL_FROM,donationUrl,donationLabel,notificationEmail};
 }
