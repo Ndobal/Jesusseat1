@@ -1,5 +1,44 @@
 # JesusSeat
 
-An evangelical product of Ndovera Limited.
+**An evangelical product of [Ndovera Limited](https://www.ndovera.com).**
 
-Phase 1 and 2 implementation in progress on a dedicated branch.
+Free church registration and a secure ministry workspace. This repository contains the Phase 1 specification and Phase 2 account/church foundation. Later phases add the public platform website, five church templates, membership/ministry/finance tools, Facebook/YouTube embeds and Webnoryx domain integration.
+
+**Native JesusSeat streaming is deferred. Only Facebook/YouTube embedded streaming is planned for this release.**
+
+## Run locally
+
+Requires Node.js 24. No dependency installation needed.
+
+```sh
+cp .env.example .env
+npm start
+```
+
+Open http://127.0.0.1:3000. Register your own account; no mock records are seeded. Without configured mail credentials, use `npm run mail` in a private local terminal to open verification/invitation/recovery links. Mail is queued, not delivered, until the provider is configured.
+
+```sh
+npm run check
+npm test
+```
+
+## Included
+
+- Verified accounts, password recovery and secure sessions.
+- Church registration and a guided setup checklist.
+- Independent churches, branch networks and denominations.
+- Church isolation, branch scopes, built-in/custom roles and team invitations.
+- Church profiles, template preference and multiple visions/missions.
+- Append-only activity history and atomic audit for important changes.
+- Encrypted mail outbox, backup utility, Dockerfile and CI.
+
+## Documentation
+
+- [Phase 1 review and complete project specification](docs/PHASE-1.md)
+- [API and permissions](docs/API.md)
+- [Setup, deployment, email and recovery](docs/OPERATIONS.md)
+- [Build status, limitations and developer handoff](docs/HANDOFF.md)
+
+## Hosting and readiness
+
+This implementation uses Node 24 and persistent SQLite on a **single server/container**, not Cloudflare Workers. Confirm this operating model before production hosting; see ADR-001. HTTPS, a stable origin, encryption key and real email credentials are required for production. Final policies, MFA for privileged accounts, an off-host backup schedule, security review and pilot acceptance remain launch requirements. Nothing here claims that all twelve phases or production deployment are complete.

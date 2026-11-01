@@ -1,0 +1,10 @@
+import { mkdirSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { backup } from 'node:sqlite';
+import { loadConfig } from '../src/config.js';
+import { openDatabase } from '../src/db.js';
+const config=loadConfig(),target=resolve(process.argv[2]||`backups/jesusseat-${Date.now()}.sqlite`);
+mkdirSync(dirname(target),{recursive:true,mode:0o700});
+const db=openDatabase(config.databasePath);
+await backup(db,target);db.close();
+console.log(`Consistent SQLite backup created: ${target}. Back up the OUTBOX_KEY separately and protect this file.`);
