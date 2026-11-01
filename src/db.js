@@ -1,6 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { id } from './security.js';
+import { BUILTINS } from './permissions.js';
 
 export function openDatabase(path) {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -11,6 +13,26 @@ export function openDatabase(path) {
     if (!db.prepare('PRAGMA table_info(roles)').all().some(column => column.name === 'archived_at')) db.exec('ALTER TABLE roles ADD COLUMN archived_at INTEGER');
     db.prepare('INSERT OR IGNORE INTO schema_migrations VALUES(2,?)').run(Date.now());
     db.prepare('INSERT OR IGNORE INTO schema_migrations VALUES(3,?)').run(Date.now());
+    db.prepare('INSERT OR IGNORE INTO schema_migrations VALUES(4,?)').run(Date.now());
+    if (!db.prepare('SELECT version FROM schema_migrations WHERE version=5').get()) {
+      for (const church of db.prepare('SELECT id FROM churches').all()) {
+        for(const memberRole of db.prepare("SELECT id,permissions FROM roles WHERE church_id=? AND builtin='member'").all(church.id)) {
+          if(memberRole.permissions==='[]') continue;
+          db.prepare("UPDATE roles SET permissions='[]' WHERE id=? AND church_id=?").run(memberRole.id,church.id);
+          audit(db,church.id,null,'role.member_workspace_removed',memberRole.id,{migration:5});
+        }
+        for (const builtin of ['head_usher','usher','project_coordinator','department_leader']) {
+          if (db.prepare('SELECT id FROM roles WHERE church_id=? AND builtin=?').get(church.id,builtin)) continue;
+          const role=BUILTINS[builtin];let name=role.name,suffix=0;
+          while (db.prepare('SELECT id FROM roles WHERE church_id=? AND name=?').get(church.id,name)) name=`${role.name} (standard ${++suffix})`;
+          const roleId=id();
+          db.prepare('INSERT INTO roles(id,church_id,name,builtin,permissions) VALUES(?,?,?,?,?)').run(roleId,church.id,name,builtin,JSON.stringify(role.permissions));
+          audit(db,church.id,null,'role.bootstrap',roleId,{builtin,migration:5});
+        }
+      }
+      db.prepare('INSERT INTO schema_migrations VALUES(5,?)').run(Date.now());
+    }
+    db.prepare('INSERT OR IGNORE INTO schema_migrations VALUES(6,?)').run(Date.now());
   });
   return db;
 }

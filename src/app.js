@@ -4,8 +4,10 @@ import { PERMISSIONS, BUILTINS, context, requireGlobal, branchesInScope, checkBr
 import { listSessions, revokeSession, revokeOtherSessions, changePassword } from './account-security.js';
 import { roleVersion, validPermissions, manageRole } from './role-management.js';
 import { createMfa } from './mfa.js';
+import { createPublicServices, contactToken, directoryList } from './public-services.js';
+import { PUBLIC_POLICY_VERSION } from './public-data.js';
 
-export const POLICY_VERSION='2026-11-01-draft-1';
+export const POLICY_VERSION=PUBLIC_POLICY_VERSION;
 export const TEMPLATES=['welcome-home','living-faith','grace-heritage','open-doors','the-gathering'];
 const HOUR=3600_000, DAY=24*HOUR;
 const optional=(v,label,max=200)=>v===undefined || v==='' ? '' : text(v,label,0,max);
@@ -14,7 +16,7 @@ function cookieValue(header,name) {
   return value?.slice(name.length+1) || '';
 }
 
-export function createApp({db,origin,production=false,outboxKey}) {
+export function createApp({db,origin,production=false,outboxKey,notificationEmail}) {
   if (!outboxKey) throw new Error('An outbox encryption key is required');
   const cookieName=production?'__Host-jesusseat':'jesusseat';
   const dummyHash=hashPassword(secret());
@@ -45,8 +47,9 @@ export function createApp({db,origin,production=false,outboxKey}) {
   }
   function verified(session) { if (!session.verified_at) fail(403,'Verify your email before creating or joining a church.'); }
   const mfa=createMfa({db,key:outboxKey,origin,production,sessionFor,queueMail});
+  const publicServices=createPublicServices({db,key:outboxKey,origin,queueMail,notificationEmail});
   function canAssign(ctx,role) {
-    if (role.builtin==='church_admin' && (ctx.builtin!=='church_admin'||ctx.branch_id)) fail(403,'Only a church-wide administrator can assign administrators.');
+    if (['church_admin','pastor','head_usher'].includes(role.builtin) && (ctx.builtin!=='church_admin'||ctx.branch_id)) fail(403,'Only a church-wide administrator can assign this leadership role.');
     if (!JSON.parse(role.permissions).every(p=>ctx.permissions.includes(p))) fail(403,'You cannot grant permissions you do not hold.');
   }
   function roleFor(churchId,roleId) {
@@ -72,8 +75,11 @@ export function createApp({db,origin,production=false,outboxKey}) {
         if (headers.origin!==origin) fail(403,'Request origin is not allowed.');
         rateLimit(db,`write:${digest(ip)}`,250);
       }
-      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.2.2'}};
+      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.3.0'}};
       if (method==='GET' && path==='/api/config') return {data:{policyVersion:POLICY_VERSION,templates:TEMPLATES,permissions:PERMISSIONS,operator:'Ndovera Limited'}};
+      if(method==='GET'&&path==='/api/public/churches')return {data:directoryList(db,req.query)};
+      if(method==='GET'&&path==='/api/public/contact-token')return {data:{nonce:contactToken(db,ip)}};
+      if(method==='POST'&&path==='/api/public/contact')return {status:202,data:publicServices.submitContact(body,ip)};
       if (method==='POST' && path==='/api/auth/register') {
         rateLimit(db,`register:${digest(ip)}`,8,HOUR);
         const address=email(body.email),name=text(body.name,'Name',2,100),hash=await hashPassword(password(body.password));
@@ -141,8 +147,15 @@ export function createApp({db,origin,production=false,outboxKey}) {
       }
       const s=auth(req),userId=s.user_id;
       if(method==='GET' && path==='/api/me') {
-        const churches=db.prepare(`SELECT c.id,c.name,c.slug,c.status,r.name role,m.branch_id FROM churches c JOIN memberships m ON m.church_id=c.id JOIN roles r ON r.id=m.role_id WHERE m.user_id=? ORDER BY c.name`).all(userId);
-        return {data:{user:{id:userId,name:s.name,email:s.email,verified:!!s.verified_at},csrf:s.csrf,churches}};
+        const churches=db.prepare(`SELECT c.id,c.name,c.slug,c.status,r.name role,m.branch_id FROM churches c JOIN memberships m ON m.church_id=c.id JOIN roles r ON r.id=m.role_id AND r.church_id=m.church_id WHERE m.user_id=? AND r.archived_at IS NULL AND (r.builtin IS NULL OR r.builtin<>'member') AND NOT EXISTS(SELECT 1 FROM worker_access_suspensions x WHERE x.church_id=m.church_id AND x.user_id=m.user_id) ORDER BY c.name`).all(userId);
+        return {data:{user:{id:userId,name:s.name,email:s.email,verified:!!s.verified_at},csrf:s.csrf,churches,platformAdmin:!!db.prepare('SELECT user_id FROM platform_admins WHERE user_id=?').get(userId)}};
+      }
+      if(method==='GET'&&path==='/api/platform/enquiries')return {data:publicServices.inbox(s,req.query)};
+      const enquiryRoute=path.match(/^\/api\/platform\/enquiries\/([a-f0-9]{32})(\/replies)?$/);
+      if(enquiryRoute){
+        if(method==='GET'&&!enquiryRoute[2])return {data:publicServices.enquiry(s,enquiryRoute[1])};
+        if(method==='PATCH'&&!enquiryRoute[2])return {data:publicServices.updateEnquiry(s,enquiryRoute[1],body)};
+        if(method==='POST'&&enquiryRoute[2])return {status:201,data:publicServices.reply(s,enquiryRoute[1],body)};
       }
       if(method==='POST' && path==='/api/auth/logout') {
         db.prepare('DELETE FROM sessions WHERE token_hash=?').run(s.token_hash);
@@ -200,25 +213,30 @@ export function createApp({db,origin,production=false,outboxKey}) {
       }
       if(method==='POST' && path==='/api/invitations/accept') {
         const token=text(body.token,'Invitation token',30,100);
-        let churchId;
+        let churchId,workspaceAccess;
         transaction(db,()=>{
           const inv=db.prepare('SELECT i.* FROM invitations i JOIN churches c ON c.id=i.church_id JOIN roles r ON r.id=i.role_id AND r.church_id=i.church_id WHERE i.token_hash=? AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>? AND c.status=\'active\' AND r.archived_at IS NULL').get(digest(token),Date.now());
           if(!inv) fail(400,'This invitation is unavailable, expired or already accepted.');
           if(inv.email!==s.email) fail(403,'Sign in with the email address this invitation was sent to.');
+          const invitedRole=roleFor(inv.church_id,inv.role_id);
+          if(['church_admin','pastor','head_usher'].includes(invitedRole.builtin)) canAssign(context(db,inv.church_id,inv.invited_by,'team.manage'),invitedRole);
           if(db.prepare('SELECT id FROM memberships WHERE church_id=? AND user_id=?').get(inv.church_id,userId)) fail(409,'You already belong to this church.');
           db.prepare('INSERT INTO memberships VALUES(?,?,?,?,?,?)').run(id(),inv.church_id,userId,inv.role_id,inv.branch_id,Date.now());
           db.prepare('UPDATE invitations SET accepted_at=? WHERE id=?').run(Date.now(),inv.id);
           audit(db,inv.church_id,userId,'invitation.accept',inv.id); churchId=inv.church_id;
+          workspaceAccess=db.prepare('SELECT builtin FROM roles WHERE id=? AND church_id=?').get(inv.role_id,inv.church_id).builtin!=='member';
         });
-        return {data:{churchId}};
+        return {data:{churchId,workspaceAccess}};
       }
       const match=path.match(/^\/api\/churches\/([a-f0-9]{32})(?:\/(.*))?$/);
       if(!match) fail(404,'Endpoint not found.');
       const churchId=match[1],tail=match[2]||'';
       const ctx=context(db,churchId,userId);
+      if(method==='GET'&&tail==='directory')return {data:publicServices.directorySettings(s,churchId)};
+      if(method==='PATCH'&&tail==='directory')return {data:publicServices.saveDirectory(s,churchId,body)};
       if(method==='GET' && !tail) {
         const c=db.prepare('SELECT * FROM churches WHERE id=?').get(churchId);
-        return {data:{church:c,permissions:ctx.permissions,scope:ctx.branch_id,onboarding:ctx.branch_id?[]:onboarding(churchId),branches:branchesInScope(db,churchId,ctx)}};
+        return {data:{church:c,permissions:ctx.permissions,workerRole:ctx.builtin,scope:ctx.branch_id,onboarding:ctx.branch_id?[]:onboarding(churchId),branches:branchesInScope(db,churchId,ctx)}};
       }
       if(method==='PATCH' && !tail) {
         context(db,churchId,userId,'church.manage'); requireGlobal(ctx);
@@ -264,7 +282,7 @@ export function createApp({db,origin,production=false,outboxKey}) {
       if(method==='GET' && tail==='team') {
         context(db,churchId,userId,'team.read');
         const scoped=new Set(branchesInScope(db,churchId,ctx).map(b=>b.id));
-        const members=db.prepare(`SELECT m.id,m.user_id,m.role_id,m.branch_id,u.name,u.email,r.name role,r.builtin FROM memberships m JOIN users u ON u.id=m.user_id JOIN roles r ON r.id=m.role_id WHERE m.church_id=? ORDER BY u.name`).all(churchId).filter(m=>!ctx.branch_id||scoped.has(m.branch_id));
+        const members=db.prepare(`SELECT m.id,m.user_id,m.role_id,m.branch_id,u.name,u.email,r.name role,r.builtin,x.suspended_at worker_suspended_at FROM memberships m JOIN users u ON u.id=m.user_id JOIN roles r ON r.id=m.role_id LEFT JOIN worker_access_suspensions x ON x.church_id=m.church_id AND x.user_id=m.user_id WHERE m.church_id=? ORDER BY u.name`).all(churchId).filter(m=>!ctx.branch_id||scoped.has(m.branch_id));
         const invitations=ctx.permissions.includes('team.manage')?db.prepare('SELECT id,email,role_id,branch_id,expires_at,accepted_at,revoked_at FROM invitations WHERE church_id=? ORDER BY created_at DESC LIMIT 100').all(churchId).filter(m=>!ctx.branch_id||scoped.has(m.branch_id)):[];
         return {data:{members,invitations}};
       }
@@ -305,11 +323,21 @@ export function createApp({db,origin,production=false,outboxKey}) {
           if(method==='PATCH') {
             role=roleFor(churchId,body.role_id);branch=body.branch_id||null;checkBranch(db,churchId,ctx,branch);canAssign(ctx,role);
             if(role.builtin==='church_admin'&&branch)fail(400,'Church administrators require church-wide scope.');
+            if(role.builtin!=='member'&&db.prepare('SELECT user_id FROM worker_access_suspensions WHERE church_id=? AND user_id=?').get(churchId,m.user_id)) fail(409,'Department reactivation is required before restoring this worker dashboard.');
           }
           if(m.builtin==='church_admin'&&(method==='DELETE'||role.builtin!=='church_admin')&&db.prepare(`SELECT count(*) n FROM memberships m JOIN roles r ON r.id=m.role_id WHERE m.church_id=? AND r.builtin='church_admin' AND m.branch_id IS NULL`).get(churchId).n<=1) fail(409,'Keep at least one church administrator.');
-          if(method==='DELETE')db.prepare('DELETE FROM memberships WHERE id=?').run(m.id);
-          else db.prepare('UPDATE memberships SET role_id=?,branch_id=? WHERE id=?').run(role.id,branch,m.id);
-          audit(db,churchId,userId,method==='DELETE'?'membership.remove':'membership.update',m.id,{role:role?.id,branch});
+          const stopping=method==='DELETE'||role.builtin==='member';
+          if(stopping&&m.builtin!=='member') {
+            db.prepare('INSERT OR IGNORE INTO worker_access_suspensions VALUES(?,?,?,?)').run(churchId,m.user_id,Date.now(),userId);
+            audit(db,churchId,userId,'worker.access_suspended',m.id,{previousRole:m.role_id,previousBranch:m.branch_id});
+          }
+          if(method==='DELETE') {
+            role=db.prepare("SELECT id FROM roles WHERE church_id=? AND builtin='member' AND archived_at IS NULL").get(churchId);
+            if(!role)fail(409,'This church needs its standard Member role before worker access can be suspended.');
+            branch=m.branch_id;
+          }
+          db.prepare('UPDATE memberships SET role_id=?,branch_id=? WHERE id=?').run(role.id,branch,m.id);
+          audit(db,churchId,userId,method==='DELETE'?'membership.worker_access_removed':'membership.update',m.id,{role:role.id,branch});
         });return {data:{message:'Team access updated.'}};
       }
       if(method==='GET'&&tail==='statements')return {data:{statements:db.prepare('SELECT * FROM statements WHERE church_id=? ORDER BY kind,position,title').all(churchId)}};

@@ -1,4 +1,4 @@
-# Phase 2 API
+# API — foundation and public platform
 
 JSON API, same origin only. Mutations require `Content-Type: application/json` and `Origin: APP_ORIGIN`. Authenticated mutations also need `X-CSRF-Token` from `/api/me`. The session is an HttpOnly cookie; never persist it in JavaScript storage. Production cookie is `__Host-jesusseat; Secure; HttpOnly; SameSite=Lax; Path=/`.
 
@@ -58,3 +58,32 @@ Role GET returns an opaque version for optimistic concurrency, member/pending-in
 ### MFA login contract
 
 When two-step verification is enabled, successful `/api/auth/login` returns `{mfaRequired:true,csrf}` and an **MFA challenge cookie**, not a full session. The client visits `/mfa`, loads the challenge CSRF and submits the factor to `/api/auth/mfa/login`. That response sets two distinct cookies: the ordinary session and the expired challenge cookie. Password recovery preserves MFA. No API accepts a client-supplied user ID to modify another person's factors. See TWO-STEP-VERIFICATION.md for expiry/replay/recovery details.
+
+## Phase 3 public site and enquiries
+
+Public HTML routes: `/`, `/about`, `/vision`, `/mission`, `/features`, `/templates`, `/templates/:design`, `/churches`, `/churches/:publishedSlug`, `/donate`, `/contact`, `/help`, `/help/:article`, `/terms`, `/privacy`, `/statement-of-faith`. Each is server-rendered. `/participation` permanently redirects to `/terms`. Unknown or unpublished detail paths return 404. `/robots.txt` and `/sitemap.xml` cover the public projection; private HTML uses noindex.
+
+| Method and endpoint | Access and behavior |
+| --- | --- |
+| `GET /api/public/contact-token` | Anonymous; returns one-use `nonce`, expires in 30 minutes. |
+| `POST /api/public/contact` | Anonymous with same-origin JSON; name, email, topic, subject, message, nonce, boolean consent, current privacyVersion; optional website honeypot must be blank. Returns 202 with a durable reference. |
+| `POST /contact` | Native same-origin URL-encoded HTML form fallback; same validation and acknowledgement. |
+| `GET /api/public/churches?q=&page=1` | Anonymous; active, opted-in church introductions, 12 per page. Search treats wildcards literally. |
+| `GET /api/churches/:id/directory` | Verified member, church.manage and whole-church scope; returns listing, version 0 when absent. |
+| `PATCH /api/churches/:id/directory` | Same permission plus CSRF; summary, website_url (optional HTTPS), boolean published, version. Stale writes return 409. |
+| `GET /api/platform/enquiries?status=new&page=1` | Explicit platform grant, verified email and enabled MFA; statuses new/open/resolved/all, 25 per page. Metadata only. |
+| `GET /api/platform/enquiries/:id` | Same platform requirements; decrypted message and reply history. |
+| `PATCH /api/platform/enquiries/:id` | Same access plus CSRF; status and current version; atomic audit. |
+| `POST /api/platform/enquiries/:id/replies` | Same access plus CSRF; message, current version and optional resolve boolean; returns 201 after reply, mail and audit commit. |
+
+`/api/me` includes a platformAdmin UI hint; every protected enquiry route independently enforces access. There is no browser/API grant endpoint. Grant/revoke through the host CLI only after account verification and MFA enrollment. Public contact acknowledgement confirms database receipt, not outbound email delivery. Replies use the existing encrypted outbox and provider retry worker. No payment API, donor ledger or Webnoryx/domain API is added in this phase.
+
+## Worker-only workspace access
+
+`/api/me` returns only churches where the account has an active worker role. The built-in Member role never opens a church workspace; every tenant API rejects it with 403, including direct requests to read or mutate profile, roles, team, statements, audit and directory. General account-security controls remain available. A custom role is a worker appointment; its role name does not confer special leadership authority.
+
+Invitation acceptance now returns `workspaceAccess` alongside `churchId`. False confirms membership without directing the person into a worker dashboard. Promotion/demotion takes effect on the next request. Workspace responses include workerRole (a built-in code, or null for a custom role) so leadership appointment controls match server rules. Sensitive-role invitation acceptance rechecks the inviter’s current authority. Church-wide built-in administrators alone can assign the built-in pastor, head_usher and church_admin roles. Generic permission subsets are insufficient for those appointments. New head_usher, usher, project_coordinator and department_leader roles do not enable unfinished finance/project/review modules. Migration five adds them to existing churches without assigning anyone automatically.
+
+## Per-church worker suspension
+
+Demoting a worker to the standard Member role or calling DELETE /api/churches/:id/team/:membershipId now preserves the membership record and suspends that church's worker dashboard. DELETE is a worker-access removal action, not registry erasure. /api/me omits that dashboard, tenant routes deny it, and GET team includes worker_suspended_at for authorised reviewers. Suspended workers cannot be restored through PATCH team (409 for a worker role) or by a new invitation to their existing membership (409). Other church memberships, worker dashboards and personal security sessions are unaffected. A same-church department appointment workflow will implement authorised restoration in Phases 5/9; there is no restore API in the current foundation.

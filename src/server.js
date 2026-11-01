@@ -6,10 +6,14 @@ import { openDatabase } from './db.js';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { deliverMail } from './mail.js';
+import { renderPublicPage, sitemap } from './public-pages.js';
+import { contactToken } from './public-services.js';
+import { TEMPLATE_DETAILS } from './public-data.js';
+import { HttpError } from './security.js';
 
 const publicRoot=fileURLToPath(new URL('../public/',import.meta.url));
-const pages=new Set(['/','/app','/login','/register','/forgot','/reset','/verify','/invite','/new-church','/participation','/security','/mfa']);
-const files=new Set(['/app.js','/styles.css','/icon.svg']);
+const pages=new Set(['/app','/login','/register','/forgot','/reset','/verify','/invite','/new-church','/security','/mfa','/platform/inbox']);
+const files=new Set(['/app.js','/styles.css','/icon.svg','/public.css','/public.js','/assets/community-hero.webp',...TEMPLATE_DETAILS.map(t=>`/assets/${t.id}.webp`)]);
 export function createHttpServer(config,db) {
   const app=createApp({db,...config});
   return createServer(async(req,res)=>{
@@ -22,6 +26,17 @@ export function createHttpServer(config,db) {
     const respond=(status,data,extra={})=>{res.writeHead(status,{...security,...extra});res.end(data);};
     try {
       const url=new URL(req.url,config.origin);
+      if(req.method==='POST'&&url.pathname==='/contact'){
+        if(req.headers.origin!==config.origin)return respond(403,'Request origin is not allowed.');
+        if(req.headers['content-type']?.split(';')[0]!=='application/x-www-form-urlencoded')return respond(415,'Use the contact form.');
+        let size=0;const chunks=[];
+        for await(const chunk of req){size+=chunk.length;if(size>32768)return respond(413,'Message is too large.');chunks.push(chunk);}
+        const body=Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString()));body.consent=body.consent==='on';
+        const result=await app({method:'POST',path:'/api/public/contact',body,headers:req.headers,ip:req.socket.remoteAddress});
+        const nonce=result.status>=400?contactToken(db,req.socket.remoteAddress):'';
+        const content=renderPublicPage({path:'/contact',db,config,nonce,receipt:result.status<400?result.data:null,error:result.data.error});
+        return respond(result.status>=400?result.status:200,content,{'Content-Type':'text/html; charset=utf-8'});
+      }
       if(url.pathname.startsWith('/api/')) {
         if(!['GET','POST','PATCH','DELETE'].includes(req.method))return respond(405,JSON.stringify({error:'Method not allowed.'}),{'Content-Type':'application/json'});
         let body={};
@@ -38,12 +53,18 @@ export function createHttpServer(config,db) {
         return respond(result.status||200,JSON.stringify(result.data),{'Content-Type':'application/json; charset=utf-8',...(result.cookies?{'Set-Cookie':result.cookies}:result.cookie?{'Set-Cookie':result.cookie}:{})});
       }
       if(req.method!=='GET'&&req.method!=='HEAD')return respond(405,'Method not allowed');
+      if(url.pathname==='/participation')return respond(308,'',{'Location':'/terms'});
+      if(url.pathname==='/robots.txt')return respond(200,`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app\nDisallow: /platform/\nDisallow: /security\nDisallow: /new-church\nDisallow: /verify\nDisallow: /reset\nDisallow: /invite\nDisallow: /mfa\nSitemap: ${config.origin}/sitemap.xml\n`,{'Content-Type':'text/plain; charset=utf-8'});
+      if(url.pathname==='/sitemap.xml')return respond(200,req.method==='HEAD'?'':sitemap(db,config.origin),{'Content-Type':'application/xml; charset=utf-8'});
+      const nonce=url.pathname==='/contact'&&req.method==='GET'?contactToken(db,req.socket.remoteAddress):'';
+      const publicPage=renderPublicPage({path:url.pathname,query:url.searchParams,db,config,nonce});
+      if(publicPage)return respond(200,req.method==='HEAD'?'':publicPage,{'Content-Type':'text/html; charset=utf-8'});
       const file=pages.has(url.pathname)?'index.html':files.has(url.pathname)?url.pathname.slice(1):null;
       if(!file)return respond(404,'Page not found');
-      const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml'};
+      const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.webp':'image/webp'};
       const data=await readFile(resolve(publicRoot,file));
       respond(200,req.method==='HEAD'?'':data,{'Content-Type':types[extname(file)]});
-    } catch {respond(500,JSON.stringify({error:'Unable to process this request.'}),{'Content-Type':'application/json'});}
+    } catch(error) {respond(error instanceof HttpError?error.status:500,JSON.stringify({error:error instanceof HttpError?error.message:'Unable to process this request.'}),{'Content-Type':'application/json'});}
   });
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) {

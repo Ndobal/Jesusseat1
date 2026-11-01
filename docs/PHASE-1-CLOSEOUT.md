@@ -11,7 +11,7 @@ Closed 1 November 2026, following the owner's instruction to conclude Phase 1 an
 | Repository access and inventory | Complete | `Ndobal/Jesusseat1` confirmed empty before initialization; source and review branch now available |
 | Product identity and ownership | Complete | JesusSeat is the evangelical product of Ndovera Limited, linked to www.ndovera.com |
 | Complete scope and build sequence | Complete | PHASE-1.md maps the agreed product into twelve phases |
-| Platform/church/member areas | Complete | Public site, super admin, church workspace and member portal boundaries documented |
+| Platform/church/member areas | Complete | Public site, super admin, worker workspace and focused member services boundaries documented |
 | Five website template directions | Complete as design specification | Names, content model and independent pages documented; implementation is Phase 4 |
 | Multiple visions and missions | Complete as requirement | Church-owned entries and page/publication model defined; initial setup records implemented in Phase 2 |
 | Roles, church hierarchy and tenant boundaries | Complete | PERMISSIONS model, church/branch scope and verified account journeys defined |
