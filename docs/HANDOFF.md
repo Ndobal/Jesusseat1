@@ -20,12 +20,13 @@ Phase 1 engineering planning is now closed. See PHASE-1-CLOSEOUT.md for evidence
 - Account-security page with current-password changes, rotation, reset invalidation and own-session inventory/revocation.
 - Version-checked custom-role edits, explicit confirmation of expanded assigned access and safe archival preserving history.
 - Transactional version-two role migration, tested against an existing version-one database.
+- Optional authenticator MFA with session-bound enrollment, password-stage challenges, replay prevention and one-use recovery codes; version-three security tables.
 
 ## Scope exclusions / limitations
 
 - Final doctrine/legal policy approval is pending. Current acceptance is explicitly a draft.
 - No production hosting or email credentials were supplied; live email and deployment are not verified.
-- Multi-factor authentication, off-host backups, production edge configuration and independent security assessment remain release-hardening tasks.
+- Optional authenticator MFA is implemented. Mandatory privileged-role enforcement, recovery support policy, off-host backups, production edge configuration and independent security assessment remain launch tasks.
 - Branch labels/hierarchy can be added; reparenting, deletion and renaming are not in the current Phase 2 API. Independent church structure cannot yet be converted after registration.
 - Custom roles can be edited and archived with safeguards; standard roles remain immutable. Archiving requires no assigned members or pending active invitations.
 - No real church/member data was imported; tests use synthetic fixtures only.

@@ -9,6 +9,7 @@ import { loadConfig } from '../src/config.js';
 import { backup } from 'node:sqlite';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { encodeBase32, decodeBase32, hotp, totp, matchTotp } from '../src/totp.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -376,7 +377,9 @@ test('custom role edits block cross-church access, self-modification and audit f
 test('opening a version-one database upgrades roles without losing records and is repeatable',()=>{
  const dir=mkdtempSync(join(tmpdir(),'jesusseat-upgrade-')),path=join(dir,'legacy.sqlite');
  const legacy=new DatabaseSync(path);
- legacy.exec(readFileSync(new URL('../src/schema.sql',import.meta.url),'utf8').replace(', archived_at INTEGER',''));
+ const originalSchema=readFileSync(new URL('../src/schema.sql',import.meta.url),'utf8').replace(', archived_at INTEGER','')
+   .replace(/CREATE TABLE IF NOT EXISTS account_mfa[\s\S]*?CREATE INDEX IF NOT EXISTS mfa_challenge_user ON mfa_challenges\(user_id\);/,'');
+ legacy.exec(originalSchema);
  const uid=id(),cid=id(),rid=id();
  legacy.prepare('INSERT INTO users(id,name,email,password_hash,created_at) VALUES(?,?,?,?,?)').run(uid,'Legacy user','legacy@example.test','test-only-unused',Date.now());
  legacy.prepare('INSERT INTO churches(id,name,slug,structure,country,city,timezone,policy_version,accepted_by,accepted_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(cid,'Legacy church','legacy-church','independent','Nigeria','Abuja','Africa/Lagos',POLICY_VERSION,uid,Date.now(),Date.now());
@@ -385,8 +388,137 @@ test('opening a version-one database upgrades roles without losing records and i
    for(let i=0;i<2;i++){
      const upgraded=openDatabase(path);
      assert.equal(upgraded.prepare('SELECT name,archived_at FROM roles WHERE id=?').get(rid).name,'Legacy custom');
-     assert.equal(upgraded.prepare('SELECT max(version) version FROM schema_migrations').get().version,2);
+     assert.equal(upgraded.prepare('SELECT max(version) version FROM schema_migrations').get().version,3);
+     assert.equal(upgraded.prepare("SELECT count(*) n FROM sqlite_master WHERE type='table' AND name IN ('account_mfa','recovery_codes','mfa_enrollments','mfa_challenges')").get().n,4);
      assert.equal(upgraded.prepare('SELECT count(*) n FROM churches').get().n,1);upgraded.close();
    }
  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('TOTP and HOTP match independent RFC 6238 and 4226 reference vectors',()=>{
+ const bytes=Buffer.from('12345678901234567890'),seed=encodeBase32(bytes);
+ assert.equal(seed,'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ');assert.deepEqual(decodeBase32(seed),bytes);
+ for(const [seconds,expected] of [[59,'94287082'],[1111111109,'07081804'],[1111111111,'14050471'],[1234567890,'89005924'],[2000000000,'69279037'],[20000000000,'65353130']])assert.equal(totp(seed,seconds*1000,8),expected);
+ ['755224','287082','359152','969429','338314','254676','287922','162583','399871','520489'].forEach((expected,index)=>assert.equal(hotp(seed,index),expected));
+ const now=1234567890000,step=Math.floor(now/30000);assert.equal(matchTotp(seed,hotp(seed,step),-1,now),step);
+ assert.equal(matchTotp(seed,hotp(seed,step),step,now),null);assert.equal(matchTotp(seed,'12345',-1,now),null);
+});
+function clockFor(t){const clock={now:1900000000000};t.mock.method(Date,'now',()=>clock.now);return clock;}
+const sessionFrom=(result,email,cookies=result.cookies)=>({cookie:(result.cookie||cookies.find(c=>c.startsWith('jesusseat='))).split(';')[0],csrf:result.data.csrf,email});
+async function enabledMfa(t){
+ const clock=clockFor(t),h=harness(),owner=await h.register('mfa-owner@example.test');
+ const started=await h.request('/api/auth/mfa/setup','POST',{currentPassword:'A long test passphrase 123'},owner);
+ assert.equal(started.status,undefined);const seed=started.data.secret;
+ const confirmed=await h.request('/api/auth/mfa/confirm','POST',{code:totp(seed)},owner);assert.equal(confirmed.status,undefined,JSON.stringify(confirmed.data));
+ return {...h,clock,owner,seed,codes:confirmed.data.codes,session:sessionFrom(confirmed,owner.email)};
+}
+async function loginChallenge(h,password='A long test passphrase 123'){
+ const result=await h.request('/api/auth/login','POST',{email:h.owner.email,password});
+ assert.equal(result.data.mfaRequired,true);return {cookie:result.cookie.split(';')[0],csrf:result.data.csrf};
+}
+function invalidCode(seed){const current=Math.floor(Date.now()/30000),valid=new Set([-1,0,1].map(offset=>hotp(seed,current+offset)));return ['000000','111111','222222','333333'].find(code=>!valid.has(code));}
+
+test('MFA enrollment requires password and originating session, encrypts the seed and rotates sessions',async t=>{
+ clockFor(t);const h=harness(),owner=await h.register('enroll@example.test'),second=await secondSession(h,owner);
+ assert.equal((await h.request('/api/auth/mfa/setup','POST',{currentPassword:'wrong'},owner)).status,403);
+ const started=await h.request('/api/auth/mfa/setup','POST',{currentPassword:'A long test passphrase 123'},owner),seed=started.data.secret;
+ assert.equal(started.data.digits,6);assert.equal(started.data.period,30);
+ const pending=h.db.prepare('SELECT * FROM mfa_enrollments').get();assert.ok(!pending.secret_cipher.includes(seed));assert.equal(decrypt(pending.secret_cipher,outboxKey),seed);
+ assert.equal((await h.request('/api/auth/mfa/confirm','POST',{code:totp(seed)},second)).status,400);
+ assert.equal((await h.request('/api/auth/mfa/confirm','POST',{code:invalidCode(seed)},owner)).status,400);
+ const confirmed=await h.request('/api/auth/mfa/confirm','POST',{code:totp(seed)},owner),fresh=sessionFrom(confirmed,owner.email);
+ assert.equal(confirmed.data.codes.length,10);assert.equal(new Set(confirmed.data.codes).size,10);
+ assert.equal((await h.request('/api/me','GET',{},owner)).status,401);assert.equal((await h.request('/api/me','GET',{},second)).status,401);
+ const status=(await h.request('/api/auth/mfa','GET',{},fresh)).data;assert.equal(status.enabled,true);assert.equal(status.recoveryCodesRemaining,10);assert.ok(!('secret' in status));
+ const row=h.db.prepare('SELECT * FROM recovery_codes LIMIT 1').get();assert.ok(!confirmed.data.codes.includes(row.code_hash));
+ assert.equal(h.db.prepare('SELECT count(*) n FROM mfa_enrollments').get().n,0);
+});
+test('MFA login has no full session until the second factor succeeds and cannot replay codes',async t=>{
+ const h=await enabledMfa(t);h.clock.now+=30000;
+ const challenge=await loginChallenge(h);
+ assert.equal((await h.request('/api/me','GET',{},challenge)).status,401);
+ assert.equal((await h.request('/api/auth/mfa/challenge','GET',{},challenge)).data.csrf,challenge.csrf);
+ assert.equal((await h.request('/api/auth/mfa/login','POST',{code:totp(h.seed)},challenge,{'x-csrf-token':'wrong'})).status,403);
+ const success=await h.request('/api/auth/mfa/login','POST',{code:totp(h.seed)},challenge);assert.equal(success.status,undefined);
+ assert.ok(success.cookies.some(cookie=>cookie.startsWith('jesusseat-mfa=;')&&cookie.includes('Max-Age=0')));
+ const fresh=sessionFrom(success,h.owner.email);assert.equal((await h.request('/api/me','GET',{},fresh)).status,undefined);
+ assert.equal((await h.request('/api/auth/mfa/login','POST',{code:totp(h.seed)},challenge)).status,401);
+ const next=await loginChallenge(h);assert.equal((await h.request('/api/auth/mfa/login','POST',{code:totp(h.seed)},next)).status,401);
+ h.clock.now+=30000;assert.equal((await h.request('/api/auth/mfa/login','POST',{code:totp(h.seed)},next)).status,undefined);
+});
+test('one-use recovery codes work for MFA sign-in and cannot be reused',async t=>{
+ const h=await enabledMfa(t),challenge=await loginChallenge(h);
+ assert.equal((await h.request('/api/auth/mfa/login','POST',{code:h.codes[0]},challenge)).status,undefined);
+ assert.equal((await h.request('/api/auth/mfa','GET',{},h.session)).data.recoveryCodesRemaining,9);
+ const retry=await loginChallenge(h);assert.equal((await h.request('/api/auth/mfa/login','POST',{code:h.codes[0]},retry)).status,401);
+ assert.equal((await h.request('/api/auth/mfa/login','POST',{code:h.codes[1]},retry)).status,undefined);
+});
+test('MFA attempts persist on failures; challenges and enrollment expire',async t=>{
+ const h=await enabledMfa(t),challenge=await loginChallenge(h),bad=invalidCode(h.seed);
+ for(let i=0;i<5;i++)assert.equal((await h.request('/api/auth/mfa/login','POST',{code:bad},challenge)).status,401);
+ assert.equal(h.db.prepare('SELECT attempts FROM mfa_challenges').get().attempts,5);
+ assert.equal((await h.request('/api/auth/mfa/login','POST',{code:h.codes[0]},challenge)).status,401);
+ const next=await loginChallenge(h);h.clock.now+=5*60000+1;
+ assert.equal((await h.request('/api/auth/mfa/login','POST',{code:h.codes[0]},next)).status,401);
+ const other=await h.register('pending-mfa@example.test');
+ const setup=await h.request('/api/auth/mfa/setup','POST',{currentPassword:'A long test passphrase 123'},other);
+ h.clock.now+=10*60000+1;
+ assert.equal((await h.request('/api/auth/mfa/confirm','POST',{code:totp(setup.data.secret)},other)).status,400);
+});
+test('password recovery preserves MFA while invalidating pending sign-ins',async t=>{
+ const h=await enabledMfa(t),challenge=await loginChallenge(h);
+ await h.request('/api/auth/forgot','POST',{email:h.owner.email});const token=h.lastToken(h.owner.email,'reset');
+ assert.equal((await h.request('/api/auth/reset','POST',{token,password:'A new recovery passphrase'})).status,undefined);
+ assert.equal((await h.request('/api/auth/mfa/login','POST',{code:h.codes[0]},challenge)).status,401);
+ const next=await loginChallenge(h,'A new recovery passphrase');
+ assert.equal((await h.request('/api/auth/mfa/login','POST',{code:h.codes[0]},next)).status,undefined);
+ assert.equal(h.db.prepare('SELECT count(*) n FROM account_mfa').get().n,1);
+});
+test('disabling MFA requires current password plus an unused factor and revokes other sessions',async t=>{
+ const h=await enabledMfa(t),challenge=await loginChallenge(h),login=await h.request('/api/auth/mfa/login','POST',{code:h.codes[0]},challenge),other=sessionFrom(login,h.owner.email);
+ assert.equal((await h.request('/api/auth/mfa/disable','POST',{currentPassword:'wrong',code:h.codes[1]},h.session)).status,403);
+ assert.equal((await h.request('/api/auth/mfa/disable','POST',{currentPassword:'A long test passphrase 123',code:invalidCode(h.seed)},h.session)).status,403);
+ const result=await h.request('/api/auth/mfa/disable','POST',{currentPassword:'A long test passphrase 123',code:h.codes[1]},h.session);assert.equal(result.status,undefined);
+ const fresh=sessionFrom(result,h.owner.email);assert.equal((await h.request('/api/auth/mfa','GET',{},fresh)).data.enabled,false);
+ assert.equal((await h.request('/api/me','GET',{},other)).status,401);
+ assert.equal(h.db.prepare('SELECT count(*) n FROM recovery_codes').get().n,0);
+ const normal=await h.request('/api/auth/login','POST',{email:h.owner.email,password:'A long test passphrase 123'});assert.ok(!normal.data.mfaRequired);assert.ok(normal.cookie.startsWith('jesusseat='));
+});
+test('replacing recovery codes invalidates old codes, rotates sessions and preserves MFA',async t=>{
+ const h=await enabledMfa(t),result=await h.request('/api/auth/mfa/recovery-codes','POST',{currentPassword:'A long test passphrase 123',code:h.codes[0]},h.session);
+ assert.equal(result.status,undefined);assert.equal(result.data.codes.length,10);
+ assert.equal((await h.request('/api/me','GET',{},h.session)).status,401);
+ const fresh=sessionFrom(result,h.owner.email);assert.equal((await h.request('/api/auth/mfa','GET',{},fresh)).data.enabled,true);
+ const challenge=await loginChallenge(h);assert.equal((await h.request('/api/auth/mfa/login','POST',{code:h.codes[1]},challenge)).status,401);
+ assert.equal((await h.request('/api/auth/mfa/login','POST',{code:result.data.codes[0]},challenge)).status,undefined);
+});
+test('MFA mutations and consumed factors roll back on audit failure',async t=>{
+ const h=await enabledMfa(t);
+ h.db.exec("CREATE TRIGGER stop_mfa_changes BEFORE INSERT ON audit WHEN NEW.action='account.mfa_disabled' BEGIN SELECT RAISE(ABORT,'forced'); END;");
+ const r=await h.request('/api/auth/mfa/disable','POST',{currentPassword:'A long test passphrase 123',code:h.codes[0]},h.session);assert.equal(r.status,500);
+ assert.equal((await h.request('/api/auth/mfa','GET',{},h.session)).data.enabled,true);
+ assert.equal((await h.request('/api/auth/mfa','GET',{},h.session)).data.recoveryCodesRemaining,10);
+ const challenge=await loginChallenge(h);assert.equal((await h.request('/api/auth/mfa/login','POST',{code:h.codes[0]},challenge)).status,undefined);
+});
+test('MFA status is account-bound and factor codes cannot authenticate another user',async t=>{
+ const h=await enabledMfa(t),other=await h.register('mfa-other@example.test');
+ assert.equal((await h.request('/api/auth/mfa','GET',{},other)).data.enabled,false);
+ assert.equal((await h.request('/api/auth/mfa/disable','POST',{currentPassword:'A long test passphrase 123',code:h.codes[0]},other)).status,403);
+ assert.equal(h.db.prepare('SELECT count(*) n FROM recovery_codes').get().n,10);
+ assert.equal((await h.request('/api/auth/mfa','GET',{},h.session)).data.enabled,true);
+});
+test('HTTP MFA sign-in returns separate session and challenge-clear cookies',async t=>{
+ const h=await enabledMfa(t),server=createHttpServer({origin,outboxKey,production:false},h.db);
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const base=`http://127.0.0.1:${server.address().port}`;
+ try{
+   assert.equal((await fetch(base+'/mfa')).status,200);
+   const login=await fetch(base+'/api/auth/login',{method:'POST',headers:{origin,'Content-Type':'application/json'},body:JSON.stringify({email:h.owner.email,password:'A long test passphrase 123'})});
+   const data=await login.json(),cookie=login.headers.getSetCookie()[0].split(';')[0];assert.equal(data.mfaRequired,true);
+   const verified=await fetch(base+'/api/auth/mfa/login',{method:'POST',headers:{origin,'Content-Type':'application/json',cookie,'x-csrf-token':data.csrf},body:JSON.stringify({code:h.codes[0]})});
+   assert.equal(verified.status,200);const cookies=verified.headers.getSetCookie();assert.equal(cookies.length,2);
+   const sessionCookie=cookies.find(c=>c.startsWith('jesusseat=')).split(';')[0];assert.ok(cookies.some(c=>c.startsWith('jesusseat-mfa=;')));
+   const me=await fetch(base+'/api/me',{headers:{cookie:sessionCookie}});assert.equal(me.status,200);
+   assert.equal((await me.json()).user.email,h.owner.email);
+ }finally{await new Promise(resolve=>server.close(resolve));}
 });

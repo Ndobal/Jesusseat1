@@ -2,9 +2,9 @@
 
 **Status: implementation and verification in progress; not publicly deployed.**
 
-Phase 1 engineering planning is closed in PHASE-1-CLOSEOUT.md. The first Phase 2 implementation was already pushed in PR #1. This continuation adds personal account security, custom-role lifecycle safeguards and a version-two database upgrade.
+Phase 1 engineering planning is closed in PHASE-1-CLOSEOUT.md. The first Phase 2 implementation was already pushed in PR #1. Continuations add personal account security, custom-role lifecycle safeguards and optional authenticator MFA with recovery codes. The database schema is now version three.
 
-Latest local verification: `npm run check` passed and **36 integration tests passed**. These cover the original 26 foundation checks plus session privacy/revocation, password rotation and concurrency, atomic security rollback, custom-role lifecycle and the existing-database upgrade. This is local execution evidence; authenticated browser acceptance and production delivery remain separately tracked below.
+Latest local verification: `npm run check` passed and **47 tests passed**. These cover the original foundation checks plus session privacy/revocation, password rotation/concurrency, atomic security rollback, custom-role lifecycle, existing-database upgrades and MFA. MFA verification includes independent RFC reference vectors, enrollment/session binding, challenges, replay/expiry/attempt limits, recovery-code consumption/replacement, no password-reset bypass and the complete HTTP cookie exchange. This is local execution evidence; authenticated browser acceptance and production delivery remain separately tracked below.
 
 ## Acceptance checklist
 
@@ -12,17 +12,17 @@ Latest local verification: `npm run check` passed and **36 integration tests pas
 | --- | --- | --- | --- |
 | P2-01 | Account registration and email verification | Implemented | Single-use/expiry and duplicate-account response tests |
 | P2-02 | Sign-in/out, recovery and session revocation | Implemented | Password/session/CSRF/origin integration tests |
-| P2-03 | Personal account security | Implemented | `/security`; current-password verification, rotation, reset invalidation, own-session inventory/revocation |
+| P2-03 | Personal account security | Implemented | `/security`; password changes, sessions, authenticator setup, two-step sign-in and one-use recovery codes |
 | P2-04 | Free church registration | Implemented | Atomic church/admin/roles/root/audit transaction tests |
 | P2-05 | Church hierarchy | Implemented baseline | Independent, multi-branch and denomination structures, branch creation and scoped descendant visibility |
 | P2-06 | Church isolation and permissions | Implemented | Cross-church reads/writes, foreign IDs, branch siblings and role escalation tests |
 | P2-07 | Invitations and staff access | Implemented | Matching verified email, expiry, revocation, replay and concurrent-acceptance tests |
 | P2-08 | Standard and custom roles | Implemented | Creation, version-checked edits, expansion confirmation, safe archive, immutable built-ins and no self-role edits |
 | P2-09 | Guided onboarding | Implemented | Checklist derived from persisted church/branch/team/vision/mission setup |
-| P2-10 | Accountability and persistence | Implemented | Atomic audit rollback, append-only triggers, backup restoration and repeatable v1-to-v2 upgrade |
+| P2-10 | Accountability and persistence | Implemented | Atomic audit rollback, append-only triggers, backup restoration and repeatable v1-to-v3 upgrade |
 | P2-11 | Browser usability | Partially verified | Earlier desktop sign-in visual inspection; new authenticated security/role controls and physical mobile devices still need browser acceptance |
 | P2-12 | Production email and hosting | Pending external configuration | No production secrets supplied; queued mail and adapter tested locally |
-| P2-13 | Public-launch security and policy review | Pending | Privileged MFA, trusted-edge policy, final policies, monitoring, independent review and pilot acceptance |
+| P2-13 | Public-launch security and policy review | Pending | Mandatory privileged-MFA policy, lost-factor support recovery, trusted-edge policy, final policies, monitoring, independent review and pilot acceptance |
 
 ## New account-security behaviour
 
@@ -51,7 +51,7 @@ Sessions currently show start/expiry time and current-session status. Device nam
 
 ## Remaining Phase 2 decisions
 
-Reparenting/removing branches and converting an independent church into a denomination require their own reviewed hierarchy lifecycle. Current branch creation is sufficient for the initial setup journey; do not add destructive reparenting without analysing inherited access. MFA and real-provider/hosting validation remain public-launch gates, not reasons to claim already tested authentication paths are still unbuilt.
+Reparenting/removing branches and converting an independent church into a denomination require their own reviewed hierarchy lifecycle. Current branch creation is sufficient for the initial setup journey; do not add destructive reparenting without analysing inherited access. Optional MFA is implemented and documented in TWO-STEP-VERIFICATION.md. Mandatory privileged-role enforcement, lost-factor recovery policy and real-provider/hosting validation remain public-launch gates, not reasons to claim already tested authentication paths are still unbuilt.
 
 ## Completion rule
 

@@ -50,7 +50,7 @@ Backup creation is implemented. A real off-host backup schedule, disaster recove
 
 Passwords use scrypt N=32768,r=8,p=3 with independent random salts; comparisons are constant-time. Sessions and one-use tokens are stored only as SHA-256 digests. Twelve-character password minimum. Authentication requests and writes have persistent rate limits, body caps and origin checks. No default admin password or public platform-admin creation route. Authentication state is never accepted from client-supplied role IDs without server-side membership checks.
 
-Production hardening still requires independent security review, password-abuse monitoring, MFA for privileged accounts, incident-response procedures, trusted-edge policy, final Terms/Privacy/Statement of Faith, transactional email deliverability testing, and pilot church acceptance. Do not label this phase foundation a production-certified system.
+Production hardening still requires independent security review, password-abuse monitoring, mandatory privileged-account MFA policy, incident-response procedures, trusted-edge policy, final Terms/Privacy/Statement of Faith, transactional email deliverability testing, and pilot church acceptance. Optional authenticator MFA is now implemented; see TWO-STEP-VERIFICATION.md. Do not label this phase foundation a production-certified system.
 
 ## Verification
 
@@ -68,3 +68,9 @@ Database startup now performs the transactional version-two migration adding rol
 The personal `/security` page lets users change their password and revoke their own sessions. No raw token/digest/CSRF credentials are exposed in the session inventory. Role edits use optimistic concurrency, explicit expansion confirmation and immediate permission checks; archiving retains historical records. Review PHASE-2.md for remaining acceptance gates.
 
 GitHub Actions initially could not start jobs because GitHub reported an account billing lock. Do not treat that as a passing or failing application test; local checks and tests are the available execution evidence until hosted CI can run. Authenticated browser workflows and mobile device checks remain unverified.
+
+### Version-three security upgrade
+
+Startup now creates the MFA enrollment, challenge, encrypted-secret and recovery-digest tables and records schema version three. Schema creation and upgrade markers run inside one transaction. Take a backup before upgrading; restore against a copy to verify the encryption key. `OUTBOX_KEY` must remain stable after authenticator enrollment as well as while mail is queued. Neither the setup key nor recovery values may be sent to an external QR generator, added to logs or placed in analytics. Keep the server clock synchronised.
+
+The production app intentionally has no unauthenticated MFA-disable route and email recovery does not bypass a factor. Resolve and document the owner-approved account-recovery policy before onboarding real churches; an operator should not improvise a database edit in response to an unverified support request.

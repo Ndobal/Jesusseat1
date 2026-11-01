@@ -72,4 +72,21 @@ CREATE TABLE IF NOT EXISTS rate_limits (
  key TEXT PRIMARY KEY, count INTEGER NOT NULL, reset_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS account_mfa (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ secret_cipher TEXT NOT NULL, enabled_at INTEGER NOT NULL, last_step INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recovery_codes (
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, code_hash TEXT NOT NULL,
+ PRIMARY KEY(user_id,code_hash)
+);
+CREATE TABLE IF NOT EXISTS mfa_enrollments (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ secret_cipher TEXT NOT NULL, session_hash TEXT NOT NULL, expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mfa_challenges (
+ token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ csrf TEXT NOT NULL, expires_at INTEGER NOT NULL, password_version TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS mfa_challenge_user ON mfa_challenges(user_id);
 INSERT OR IGNORE INTO schema_migrations VALUES (1, unixepoch()*1000);

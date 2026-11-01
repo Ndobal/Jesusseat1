@@ -27,6 +27,7 @@ export function revokeSession(db, session, selectedId) {
 export function revokeOtherSessions(db, session) {
   return transaction(db, () => {
     const result = db.prepare('DELETE FROM sessions WHERE user_id=? AND token_hash<>?').run(session.user_id, session.token_hash);
+    db.prepare('DELETE FROM mfa_challenges WHERE user_id=?').run(session.user_id);
     audit(db, null, session.user_id, 'account.other_sessions_revoke', session.user_id, { count: Number(result.changes) });
     return Number(result.changes);
   });
@@ -48,6 +49,8 @@ export async function changePassword(db, session, body, sessionFor, queueMail) {
     db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hash, user.id);
     db.prepare('DELETE FROM tokens WHERE user_id=? AND kind=\'reset\'').run(user.id);
     db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+    db.prepare('DELETE FROM mfa_challenges WHERE user_id=?').run(user.id);
+    db.prepare('DELETE FROM mfa_enrollments WHERE user_id=?').run(user.id);
     const fresh = sessionFor(user);
     audit(db, null, user.id, 'account.password_change', user.id);
     queueMail(user.email, 'Your JesusSeat password was changed',

@@ -3,6 +3,7 @@ import { transaction, audit } from './db.js';
 import { PERMISSIONS, BUILTINS, context, requireGlobal, branchesInScope, checkBranch } from './permissions.js';
 import { listSessions, revokeSession, revokeOtherSessions, changePassword } from './account-security.js';
 import { roleVersion, validPermissions, manageRole } from './role-management.js';
+import { createMfa } from './mfa.js';
 
 export const POLICY_VERSION='2026-11-01-draft-1';
 export const TEMPLATES=['welcome-home','living-faith','grace-heritage','open-doors','the-gathering'];
@@ -43,6 +44,7 @@ export function createApp({db,origin,production=false,outboxKey}) {
     return session;
   }
   function verified(session) { if (!session.verified_at) fail(403,'Verify your email before creating or joining a church.'); }
+  const mfa=createMfa({db,key:outboxKey,origin,production,sessionFor,queueMail});
   function canAssign(ctx,role) {
     if (role.builtin==='church_admin' && (ctx.builtin!=='church_admin'||ctx.branch_id)) fail(403,'Only a church-wide administrator can assign administrators.');
     if (!JSON.parse(role.permissions).every(p=>ctx.permissions.includes(p))) fail(403,'You cannot grant permissions you do not hold.');
@@ -70,7 +72,7 @@ export function createApp({db,origin,production=false,outboxKey}) {
         if (headers.origin!==origin) fail(403,'Request origin is not allowed.');
         rateLimit(db,`write:${digest(ip)}`,250);
       }
-      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.2.1'}};
+      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.2.2'}};
       if (method==='GET' && path==='/api/config') return {data:{policyVersion:POLICY_VERSION,templates:TEMPLATES,permissions:PERMISSIONS,operator:'Ndovera Limited'}};
       if (method==='POST' && path==='/api/auth/register') {
         rateLimit(db,`register:${digest(ip)}`,8,HOUR);
@@ -95,9 +97,14 @@ export function createApp({db,origin,production=false,outboxKey}) {
         const s=transaction(db,()=>{
           // Do not create a session with a password invalidated while scrypt was running.
           if(db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id)?.password_hash!==user.password_hash)fail(401,'Email or password is incorrect.');
+          if(db.prepare('SELECT user_id FROM account_mfa WHERE user_id=?').get(user.id))return mfa.startLogin(user);
           audit(db,null,user.id,'account.login',user.id); return sessionFor(user);
         });
-        return {data:{csrf:s.csrf},cookie:s.cookie};
+        return {data:{csrf:s.csrf,...(s.mfaRequired?{mfaRequired:true}:{})},cookie:s.cookie};
+      }
+      if(method==='GET' && path==='/api/auth/mfa/challenge')return {data:mfa.challenge(req)};
+      if(method==='POST' && path==='/api/auth/mfa/login') {
+        const result=mfa.completeLogin(req,body.code);return {data:{csrf:result.csrf},cookies:result.cookies};
       }
       if (method==='POST' && path==='/api/auth/forgot') {
         const address=email(body.email); rateLimit(db,`forgot:${digest(ip)}`,8,HOUR);
@@ -126,6 +133,8 @@ export function createApp({db,origin,production=false,outboxKey}) {
           db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hash,t.user_id);
           db.prepare('DELETE FROM tokens WHERE user_id=? AND kind=\'reset\'').run(t.user_id);
           db.prepare('DELETE FROM sessions WHERE user_id=?').run(t.user_id);
+          db.prepare('DELETE FROM mfa_challenges WHERE user_id=?').run(t.user_id);
+          db.prepare('DELETE FROM mfa_enrollments WHERE user_id=?').run(t.user_id);
           audit(db,null,t.user_id,'account.password_reset',t.user_id);
         });
         return {data:{message:'Password updated. Please sign in again.'}};
@@ -145,6 +154,15 @@ export function createApp({db,origin,production=false,outboxKey}) {
         return {status:202,data:{message:'If needed, a new verification email has been queued.'}};
       }
       if(method==='GET' && path==='/api/auth/sessions') return {data:{sessions:listSessions(db,s)}};
+      if(method==='GET' && path==='/api/auth/mfa')return {data:mfa.status(s)};
+      if(method==='POST' && path==='/api/auth/mfa/setup')return {data:await mfa.begin(s,body.currentPassword)};
+      if(method==='POST' && path==='/api/auth/mfa/confirm') {
+        const result=mfa.confirm(s,body.code);return {data:{codes:result.codes,csrf:result.csrf},cookie:result.cookie};
+      }
+      if(method==='POST' && ['/api/auth/mfa/disable','/api/auth/mfa/recovery-codes'].includes(path)) {
+        const result=await mfa.modify(s,body,path.endsWith('/disable')?'disable':'replace');
+        return {data:{codes:result.codes,csrf:result.csrf,message:path.endsWith('/disable')?'Two-step verification disabled.':'Recovery codes replaced.'},cookie:result.cookie};
+      }
       if(method==='POST' && path==='/api/auth/logout-others') return {data:{message:'Other sessions signed out.',count:revokeOtherSessions(db,s)}};
       const sessionRoute=path.match(/^\/api\/auth\/sessions\/([a-f0-9]{64})$/);
       if(method==='DELETE' && sessionRoute) {

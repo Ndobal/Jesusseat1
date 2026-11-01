@@ -26,6 +26,7 @@ npm test
 
 - Verified accounts, password recovery and secure sessions.
 - Personal account security, password changes and active-session controls.
+- Optional authenticator-app verification, one-use recovery codes and protected two-step sign-in.
 - Church registration and a guided setup checklist.
 - Independent churches, branch networks and denominations.
 - Church isolation, branch scopes, built-in/custom roles and team invitations.
@@ -39,10 +40,11 @@ npm test
 - [Phase 1 review and complete project specification](docs/PHASE-1.md)
 - [Phase 1 closeout](docs/PHASE-1-CLOSEOUT.md)
 - [Phase 2 implementation and acceptance checklist](docs/PHASE-2.md)
+- [Two-step verification and recovery](docs/TWO-STEP-VERIFICATION.md)
 - [API and permissions](docs/API.md)
 - [Setup, deployment, email and recovery](docs/OPERATIONS.md)
 - [Build status, limitations and developer handoff](docs/HANDOFF.md)
 
 ## Hosting and readiness
 
-This implementation uses Node 24 and persistent SQLite on a **single server/container**, not Cloudflare Workers. Confirm this operating model before production hosting; see ADR-001. HTTPS, a stable origin, encryption key and real email credentials are required for production. Final policies, MFA for privileged accounts, an off-host backup schedule, security review and pilot acceptance remain launch requirements. Nothing here claims that all twelve phases or production deployment are complete.
+This implementation uses Node 24 and persistent SQLite on a **single server/container**, not Cloudflare Workers. Confirm this operating model before production hosting; see ADR-001. HTTPS, a stable origin, encryption key and real email credentials are required for production. Optional MFA is available; mandatory privileged-role enforcement and recovery support policy remain launch decisions alongside final policies, off-host backups, security review and pilot acceptance. Nothing here claims that all twelve phases or production deployment are complete.

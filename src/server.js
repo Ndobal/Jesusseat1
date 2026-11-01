@@ -8,7 +8,7 @@ import { loadConfig } from './config.js';
 import { deliverMail } from './mail.js';
 
 const publicRoot=fileURLToPath(new URL('../public/',import.meta.url));
-const pages=new Set(['/','/app','/login','/register','/forgot','/reset','/verify','/invite','/new-church','/participation','/security']);
+const pages=new Set(['/','/app','/login','/register','/forgot','/reset','/verify','/invite','/new-church','/participation','/security','/mfa']);
 const files=new Set(['/app.js','/styles.css','/icon.svg']);
 export function createHttpServer(config,db) {
   const app=createApp({db,...config});
@@ -35,7 +35,7 @@ export function createHttpServer(config,db) {
         }
         // Deliberately ignore untrusted forwarding headers. Run one app process behind a trusted reverse proxy.
         const result=await app({method:req.method,path:url.pathname,query:url.searchParams,body,headers:req.headers,ip:req.socket.remoteAddress});
-        return respond(result.status||200,JSON.stringify(result.data),{'Content-Type':'application/json; charset=utf-8',...(result.cookie?{'Set-Cookie':result.cookie}:{})});
+        return respond(result.status||200,JSON.stringify(result.data),{'Content-Type':'application/json; charset=utf-8',...(result.cookies?{'Set-Cookie':result.cookies}:result.cookie?{'Set-Cookie':result.cookie}:{})});
       }
       if(req.method!=='GET'&&req.method!=='HEAD')return respond(405,'Method not allowed');
       const file=pages.has(url.pathname)?'index.html':files.has(url.pathname)?url.pathname.slice(1):null;
