@@ -136,3 +136,66 @@ Provide scoped worker messages, department notices, roster reminders, coordinato
 - Project chat cannot disclose another donor's evidence or change money without an approved adjustment.
 - Reviews/comments require appropriate confidentiality/moderation; roster publication excludes private information and preserves consent.
 - Test every new workflow with persisted storage, server permissions, audit atomicity, failure handling and responsive accessible interfaces before calling it built.
+
+## Registry self-registration and birthday care
+
+### One person, several church relationships
+
+A person can be an ordinary member in several churches, a worker in several churches, or a mixture of both. Use a global sign-in identity only where the person has an account, with separate tenant-owned registry records and worker appointments for each church. Do not impose a global one-church membership or worker limit. Each worker church has its own dashboard, permissions, department/branch scope, appointments and suspension state. Church A cannot see or change the person's Church B registry, birthday preferences, duties or dashboard.
+
+Stopping work in Church A suspends only Church A's worker dashboard. It must not suspend the global account, revoke Church B's worker dashboard, delete either membership or switch off birthday care in either church. A person remains in the ordinary registry of Church A unless they separately request to leave that church's registry. In product language, becoming a worker enables full worker access; it does not mean ordinary members are less fully part of their church.
+
+### Phase 4–5 — Join the church registry
+
+Add an independent Join our church / Register as a member page to each church website, backed by Phase 5's registry. Collect:
+
+| Field | Requirement |
+| --- | --- |
+| Full name | Required; the church-facing preferred name can be corrected by a verified process. |
+| Email | Required; verify ownership before linking an account or showing a private submission. |
+| Phone | Required, with country code; verify the contact where the selected service requires it. |
+| Birth day | Required valid day, together with month. |
+| Birth month | Required valid month; no birth year, age or complete date of birth is collected. |
+| Birthday greeting preferences | Separate email, WhatsApp and SMS choices with opt-out. |
+| Church birthday announcement permission | Separate choice to share the member's birthday/name with the pastor and church community. |
+
+Validate real month/day combinations and support 29 February without asking for a birth year. Give the church an explicit 29-February-in-non-leap-years setting (28 February or 1 March). Never infer a birth year, age or a default full date for storage.
+
+Self-registration creates a pending/verified ordinary registry record, not a worker role or dashboard. Use rate limits, duplicate review within the selected church and a verifiable contact process. Do not reveal whether an email or phone belongs to another church. Joining Church B must not overwrite the person's Church A record. Link an existing verified identity to an approved registry record without creating another person or asking them to create a second sign-in account.
+
+Allow authorised church staff to review and correct a record; verify the submitter's identity before changing their response address, birthday or preferences. Record consent, source and correction history. The registry is private; self-registration is not consent to publish someone's email, phone number, birth day/month or photograph.
+
+### Phase 2 implemented now — keep membership when worker access stops
+
+Both worker-role demotion to Member and the existing remove-access action suspend that church's worker access, preserve the church membership record and retain the same identity. Personal account-security controls and other churches' dashboards remain available. The workspace chooser excludes the suspended church, and direct API calls are denied. A role edit, new invitation or altered navigation cannot reopen it.
+
+Migration six adds a church/user suspension marker with audit. It does not add personal birthday fields or a birthday scheduler before the registry module exists. Existing churches and assignments remain intact; old physical membership removals cannot be reconstructed from an upgrade alone.
+
+### Phase 5/9 — department appointment and reactivation
+
+A valid, accepted department appointment in the same church is required to restore a previously suspended worker dashboard. The authorised leader can act only for their own department/branch and cannot select an elevated role beyond their authority. Appointing a pastor, head usher or church administrator still requires the church-wide administrator. If every active worker appointment ends, suspend that church's worker dashboard; ending one department assignment must not suspend it when another authorised appointment in that same church remains active.
+
+Reactivation must atomically check the registry/account link, church status, department/branch, role, appointment approval/acceptance and current suspension revision, then activate the appointment, remove the active suspension marker and append the audit event. Do not reactivate after a worker's own role change, an expired invitation, or a department in another church. Preserve the past suspension/appointment history in audit.
+
+Until the department appointment module is implemented, the existing team role editor deliberately cannot restore a previously suspended worker. Do not add a temporary restore toggle or fake department assignment. Initial worker invitations/appointments remain available through the foundation for people who have not been suspended.
+
+### Phase 10 — birthday greetings and church notices
+
+Schedule birthday care from the **church registry**, independently of worker status. Ordinary members, active workers and former workers who remain registered continue to be eligible. A member leaving the registry, withdrawing messaging permission or withdrawing announcement permission changes the corresponding eligibility; ending a worker appointment does not.
+
+Send the member a personalised church birthday greeting by their permitted email, WhatsApp or SMS channel. Use channel preferences, verified destinations, configured providers and usage budgets. Avoid sending three copies by default; use the selected primary channel with consent-aware fallback, or additional channels where explicitly chosen. WhatsApp/SMS must not be described as delivered when credentials, templates, units or provider acceptance are missing. Surface failed or budget-paused deliveries to authorised staff, with safe retries.
+
+Notify the pastor and make a birthday announcement available to the entire church community for members who permit church sharing. Use a daily birthday bulletin and the church's approved communication channels; ordinary members still do not need dashboards. Show the approved display name and birthday greeting, with a photo only when separately permitted. Do not disclose email addresses, phone numbers, birth year, age, full private registry details or recipient contact lists. Birthday sharing permission is distinct from permission to receive a personal greeting.
+
+Use church-local dates/timezones, durable scheduled jobs, an agreed catch-up window, per-church preferences, idempotent yearly/daily delivery keys and retry tracking. A person belonging to several churches may receive each church's greeting according to their preferences; a worker role change must not generate another birthday greeting. Prevent duplicate broadcasts on scheduler restarts, repeated provider callbacks or a contact correction. Keep provider charges and opt-outs visible to the church administrator.
+
+### Additional acceptance tests
+
+- The same identity can hold two active worker dashboards and ordinary membership in a third church.
+- Suspending Church A preserves every registry relationship and leaves Church B active; Church A cannot be restored by role edit or re-invitation.
+- Suspension, membership preservation and audit commit or roll back together.
+- Department-based restoration accepts only an authorised same-church appointment, and last-assignment removal is calculated per church.
+- Registry submission does not create a worker, leak another tenant's member record or collect a birth year.
+- Birthday jobs include ordinary and suspended-worker members, respect consent and channel budgets, and exclude members who have left the registry.
+- Date validation covers invalid days, 29 February, non-leap policies, timezone boundaries and duplicate/retried jobs.
+- Church birthday notices never include contact details or age and cannot be exposed without the member's sharing permission.

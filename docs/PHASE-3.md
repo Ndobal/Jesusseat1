@@ -43,10 +43,12 @@ Policies carry a short **Policy draft** status. Public copy uses direct visitor-
 
 ## Verification and remaining gates
 
-Validation passed: `npm run check` and all **75 automated tests** (47 foundation, 22 public-platform and 6 worker-access tests). Run the same commands when continuing. Public tests cover routes/metadata, asset responses, native contact submission, nonce/consent/abuse checks, encryption, access boundaries, transactional rollback, reply conflicts, directory opt-in/withdrawal, suspension, tenant/branch limits, safe links, literal searches, escaping and checkout states. The foundation migration fixture verifies repeatable upgrades from version one.
+Validation passed: `npm run check` and all **77 automated tests** (47 foundation, 22 public-platform and 8 worker-access tests). Run the same commands when continuing. Public tests cover routes/metadata, asset responses, native contact submission, nonce/consent/abuse checks, encryption, access boundaries, transactional rollback, reply conflicts, directory opt-in/withdrawal, suspension, tenant/branch limits, safe links, literal searches, escaping and checkout states. The foundation migration fixture verifies repeatable upgrades from version one.
 
 Managed-browser visual inspection covered the homepage, template gallery, design detail, Contact, plus mobile layout inspection. Automated tests use synthetic in-memory data. Real provider email, payment checkout ownership, authenticated inbox/directory browser acceptance, independent accessibility/security review and production hosting remain launch gates. The GitHub account’s previously reported billing lock may prevent hosted CI from starting; local results are separate evidence.
 
 Next: Phase 4 builds five real tenant templates, independent church page routing, content editing, revisions, preview and publication with safe public projections. Webnoryx domains, full super-admin suspension/support tooling and payments stay in their later phases. Phase 7 remains Facebook/YouTube embedding only; native streaming is deferred.
 
 Worker-access continuation: migration five and the expanded role/dashboard rules are documented in CHURCH-WORKFLOWS.md. Ordinary members retain focused services without a church dashboard.
+
+Per-church worker suspension now preserves membership, blocks role-edit restoration and leaves other church dashboards active. Migration six and the registry/birthday plan are documented in CHURCH-WORKFLOWS.md.

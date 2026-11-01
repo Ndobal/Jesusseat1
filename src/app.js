@@ -147,7 +147,7 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
       }
       const s=auth(req),userId=s.user_id;
       if(method==='GET' && path==='/api/me') {
-        const churches=db.prepare(`SELECT c.id,c.name,c.slug,c.status,r.name role,m.branch_id FROM churches c JOIN memberships m ON m.church_id=c.id JOIN roles r ON r.id=m.role_id AND r.church_id=m.church_id WHERE m.user_id=? AND r.archived_at IS NULL AND (r.builtin IS NULL OR r.builtin<>'member') ORDER BY c.name`).all(userId);
+        const churches=db.prepare(`SELECT c.id,c.name,c.slug,c.status,r.name role,m.branch_id FROM churches c JOIN memberships m ON m.church_id=c.id JOIN roles r ON r.id=m.role_id AND r.church_id=m.church_id WHERE m.user_id=? AND r.archived_at IS NULL AND (r.builtin IS NULL OR r.builtin<>'member') AND NOT EXISTS(SELECT 1 FROM worker_access_suspensions x WHERE x.church_id=m.church_id AND x.user_id=m.user_id) ORDER BY c.name`).all(userId);
         return {data:{user:{id:userId,name:s.name,email:s.email,verified:!!s.verified_at},csrf:s.csrf,churches,platformAdmin:!!db.prepare('SELECT user_id FROM platform_admins WHERE user_id=?').get(userId)}};
       }
       if(method==='GET'&&path==='/api/platform/enquiries')return {data:publicServices.inbox(s,req.query)};
@@ -282,7 +282,7 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
       if(method==='GET' && tail==='team') {
         context(db,churchId,userId,'team.read');
         const scoped=new Set(branchesInScope(db,churchId,ctx).map(b=>b.id));
-        const members=db.prepare(`SELECT m.id,m.user_id,m.role_id,m.branch_id,u.name,u.email,r.name role,r.builtin FROM memberships m JOIN users u ON u.id=m.user_id JOIN roles r ON r.id=m.role_id WHERE m.church_id=? ORDER BY u.name`).all(churchId).filter(m=>!ctx.branch_id||scoped.has(m.branch_id));
+        const members=db.prepare(`SELECT m.id,m.user_id,m.role_id,m.branch_id,u.name,u.email,r.name role,r.builtin,x.suspended_at worker_suspended_at FROM memberships m JOIN users u ON u.id=m.user_id JOIN roles r ON r.id=m.role_id LEFT JOIN worker_access_suspensions x ON x.church_id=m.church_id AND x.user_id=m.user_id WHERE m.church_id=? ORDER BY u.name`).all(churchId).filter(m=>!ctx.branch_id||scoped.has(m.branch_id));
         const invitations=ctx.permissions.includes('team.manage')?db.prepare('SELECT id,email,role_id,branch_id,expires_at,accepted_at,revoked_at FROM invitations WHERE church_id=? ORDER BY created_at DESC LIMIT 100').all(churchId).filter(m=>!ctx.branch_id||scoped.has(m.branch_id)):[];
         return {data:{members,invitations}};
       }
@@ -323,11 +323,21 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
           if(method==='PATCH') {
             role=roleFor(churchId,body.role_id);branch=body.branch_id||null;checkBranch(db,churchId,ctx,branch);canAssign(ctx,role);
             if(role.builtin==='church_admin'&&branch)fail(400,'Church administrators require church-wide scope.');
+            if(role.builtin!=='member'&&db.prepare('SELECT user_id FROM worker_access_suspensions WHERE church_id=? AND user_id=?').get(churchId,m.user_id)) fail(409,'Department reactivation is required before restoring this worker dashboard.');
           }
           if(m.builtin==='church_admin'&&(method==='DELETE'||role.builtin!=='church_admin')&&db.prepare(`SELECT count(*) n FROM memberships m JOIN roles r ON r.id=m.role_id WHERE m.church_id=? AND r.builtin='church_admin' AND m.branch_id IS NULL`).get(churchId).n<=1) fail(409,'Keep at least one church administrator.');
-          if(method==='DELETE')db.prepare('DELETE FROM memberships WHERE id=?').run(m.id);
-          else db.prepare('UPDATE memberships SET role_id=?,branch_id=? WHERE id=?').run(role.id,branch,m.id);
-          audit(db,churchId,userId,method==='DELETE'?'membership.remove':'membership.update',m.id,{role:role?.id,branch});
+          const stopping=method==='DELETE'||role.builtin==='member';
+          if(stopping&&m.builtin!=='member') {
+            db.prepare('INSERT OR IGNORE INTO worker_access_suspensions VALUES(?,?,?,?)').run(churchId,m.user_id,Date.now(),userId);
+            audit(db,churchId,userId,'worker.access_suspended',m.id,{previousRole:m.role_id,previousBranch:m.branch_id});
+          }
+          if(method==='DELETE') {
+            role=db.prepare("SELECT id FROM roles WHERE church_id=? AND builtin='member' AND archived_at IS NULL").get(churchId);
+            if(!role)fail(409,'This church needs its standard Member role before worker access can be suspended.');
+            branch=m.branch_id;
+          }
+          db.prepare('UPDATE memberships SET role_id=?,branch_id=? WHERE id=?').run(role.id,branch,m.id);
+          audit(db,churchId,userId,method==='DELETE'?'membership.worker_access_removed':'membership.update',m.id,{role:role.id,branch});
         });return {data:{message:'Team access updated.'}};
       }
       if(method==='GET'&&tail==='statements')return {data:{statements:db.prepare('SELECT * FROM statements WHERE church_id=? ORDER BY kind,position,title').all(churchId)}};

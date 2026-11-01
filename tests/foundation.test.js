@@ -159,7 +159,7 @@ test('custom role validation, membership changes and removal take effect immedia
  assert.equal((await h.request(`${base}/team/${worker.id}`,'PATCH',{role_id:member.id},h.owner)).status,undefined);
  assert.equal((await h.request(base,'GET',{},h.worker)).status,403);
  assert.equal((await h.request(`${base}/team/${worker.id}`,'DELETE',{},h.owner)).status,undefined);
- assert.equal((await h.request(base,'GET',{},h.worker)).status,404);
+ assert.equal((await h.request(base,'GET',{},h.worker)).status,403);
 });
 test('profile and multiple visions and missions drive derived onboarding progress',async()=>{
  const h=harness(),s=await h.register('setup@example.test'),c=await h.church(s,'setup-church','independent'),base=`/api/churches/${c}`;
@@ -388,7 +388,7 @@ test('opening a version-one database upgrades roles without losing records and i
    for(let i=0;i<2;i++){
      const upgraded=openDatabase(path);
      assert.equal(upgraded.prepare('SELECT name,archived_at FROM roles WHERE id=?').get(rid).name,'Legacy custom');
-     assert.equal(upgraded.prepare('SELECT max(version) version FROM schema_migrations').get().version,5);
+     assert.equal(upgraded.prepare('SELECT max(version) version FROM schema_migrations').get().version,6);
      assert.equal(upgraded.prepare("SELECT count(*) n FROM sqlite_master WHERE type='table' AND name IN ('account_mfa','recovery_codes','mfa_enrollments','mfa_challenges')").get().n,4);
      assert.equal(upgraded.prepare('SELECT count(*) n FROM churches').get().n,1);upgraded.close();
    }

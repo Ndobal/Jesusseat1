@@ -47,3 +47,9 @@ See CHURCH-WORKFLOWS.md for the expanded requirements and phase assignments. It 
 ## Next
 
 Phase 3 engineering is implemented; complete its live-provider and owner-policy launch gates before production. Begin Phase 4 when selected, using the public projection boundary rather than exposing tenant workspace APIs. Build real church template layouts, independent page routing, content editing, revision history, previews, safe asset uploads and explicit publishing. Keep native streaming deferred. Domains/Webnoryx, donation ledgers and full platform suspension/support workflows remain in their assigned later phases.
+
+## Registry, birthdays and per-church suspension continuation
+
+Migration six adds worker_access_suspensions. Worker demotion/removal preserves the membership row as Member instead of deleting it; the suspension marker independently denies the workspace and removes it from /api/me. A role edit or new invitation cannot restore access. No global account/session suspension occurs, and the same person can keep worker dashboards and member relationships in other churches. Audit and the state change are atomic. The team UI distinguishes suspended dashboards and does not offer an ineffective role-change restore.
+
+Registry self-registration (name, email, phone, birth day/month without a year), department-based activation/reactivation, and consent-aware birthday greetings/pastor/church notices are planned in CHURCH-WORKFLOWS.md. They are not claimed implemented here. Birthday eligibility will use registry membership, not worker status. The department module must supply the authorised reactivation transaction; no temporary admin bypass or fabricated department exists in the current build.

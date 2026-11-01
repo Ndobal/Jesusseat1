@@ -112,4 +112,10 @@ CREATE TABLE IF NOT EXISTS church_directory (
  website_url TEXT NOT NULL DEFAULT '', published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0,1)),
  version INTEGER NOT NULL DEFAULT 1, updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS worker_access_suspensions (
+ church_id TEXT NOT NULL, user_id TEXT NOT NULL, suspended_at INTEGER NOT NULL,
+ initiated_by TEXT NOT NULL REFERENCES users(id),
+ PRIMARY KEY(church_id,user_id),
+ FOREIGN KEY(church_id,user_id) REFERENCES memberships(church_id,user_id)
+);
 INSERT OR IGNORE INTO schema_migrations VALUES (1, unixepoch()*1000);

@@ -86,12 +86,12 @@ The initial participation draft requires sound biblical teaching, honest represe
 2. Accounts, verification/recovery, church registration/isolation, invitations, hierarchy, roles, audit, onboarding.
 3. Platform public site, contact intake, policy pages and help structure.
 4. Five church templates, page/content management, revision history, accessibility, publishing and free addresses.
-5. Members/households/visitors, imports, duplicate review and follow-up.
+5. Private member self-registration (name, email, phone and birth day/month only), households/visitors, verified identity linking, multi-church registry relationships, worker appointments, imports, duplicate review and follow-up.
 6. Ushers’ attendance corner, service reports, count review/corrections, groups, pastoral care, welfare and children’s safeguarding/check-in.
 7. Facebook/YouTube embeds and authorised media connections; no native streaming.
 8. Ushers’ giving records, private transfer-receipt review, confidential tithes, separate gateway/manual totals, project contributions/correction conversations, approvals/reconciliation and separate platform donations.
 9. Department/worker reviews and moderated feedback, active/completed projects, coordinator tasks, ministers’/workers’ rosters, weekly activities, Open Heavens/devotionals, events, worship planning, discipleship, volunteers/staff and facilities/assets.
-10. Focused member services and verified submission/conversation access without member dashboards; worker communications and reminders with consent/usage controls.
+10. Focused member services without member dashboards; birthday greetings and pastor/church birthday notices, verified conversations, worker communications and reminders with consent/usage controls.
 11. Custom domains/Webnoryx, full super-admin/support and suspension workflows.
 12. Church pilot, security/accessibility/performance checks, policy completion, backup recovery and launch.
 
@@ -100,3 +100,5 @@ Each later phase must include UI, storage, server permissions, audit, failure ha
 ## Expanded church workflows
 
 The owner’s worker-dashboard, ushering, confidential tithe, receipt, project, department, roster and devotional requirements are specified in [CHURCH-WORKFLOWS.md](CHURCH-WORKFLOWS.md), including the phase mapping, access matrix, reconciliation rules and acceptance tests. This supersedes earlier references to a general member portal. Only the head usher, church administrator and pastor may view identified tithe amounts within their church/branch scope. Gateway and confirmed manual payments are separate sources with a combined total; unverified receipt claims and duplicate matches are excluded.
+
+People may be registered members and workers in multiple churches. Each church dashboard has independent access/suspension. Stopping work preserves ordinary membership and birthday care; restoring a suspended worker dashboard requires a valid department appointment in that church. Registry self-registration and birthday care are specified in CHURCH-WORKFLOWS.md for Phases 4–5 and 10.

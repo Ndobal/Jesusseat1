@@ -26,12 +26,33 @@ test('ordinary members cannot read or mutate any worker workspace route',async t
  assert.equal(h.db.prepare('SELECT name FROM churches').get().name,'Workers church');
  assert.equal((await h.request('/api/auth/sessions',h.worker)).status,undefined);
 });
-test('worker promotion, demotion and role changes affect the next request',async t=>{
+test('worker demotion suspends access immediately and blocks direct reactivation',async t=>{
  const h=await fixture(t);h.assign(h.worker,'usher');assert.equal((await h.request(h.base,h.worker)).status,undefined);assert.equal((await h.request('/api/me',h.worker)).data.churches.length,1);
  const membership=h.db.prepare('SELECT id FROM memberships WHERE user_id=?').get(h.worker.uid).id,member=h.db.prepare("SELECT id FROM roles WHERE church_id=? AND builtin='member'").get(h.cid).id;
  assert.equal((await h.request(`${h.base}/team/${membership}`,h.owner,'PATCH',{role_id:member})).status,undefined);assert.equal((await h.request(h.base,h.worker)).status,403);assert.equal((await h.request('/api/me',h.worker)).data.churches.length,0);
  const head=h.db.prepare("SELECT id FROM roles WHERE church_id=? AND builtin='head_usher'").get(h.cid).id;
- assert.equal((await h.request(`${h.base}/team/${membership}`,h.owner,'PATCH',{role_id:head})).status,undefined);assert.equal((await h.request(h.base,h.worker)).status,undefined);
+ assert.equal((await h.request(`${h.base}/team/${membership}`,h.owner,'PATCH',{role_id:head})).status,409);assert.equal((await h.request(h.base,h.worker)).status,403);assert.equal(h.db.prepare('SELECT count(*) n FROM memberships WHERE user_id=?').get(h.worker.uid).n,1);
+});
+test('one person can serve multiple churches and suspension affects only one dashboard',async t=>{
+ const h=await fixture(t);h.assign(h.worker,'usher');
+ const create=async slug=>{const r=await h.request('/api/churches',h.owner,'POST',{name:slug,slug,country:'Nigeria',city:'Abuja',timezone:'Africa/Lagos',structure:'independent',acceptPolicy:true,policyVersion:POLICY_VERSION});assert.equal(r.status,201);return r.data.id;};
+ const b=await create('another-church'),c=await create('third-church');
+ for(const [church,builtin] of [[b,'media'],[c,'member']]){const role=h.db.prepare('SELECT id FROM roles WHERE church_id=? AND builtin=?').get(church,builtin).id;h.db.prepare('INSERT INTO memberships VALUES(?,?,?,?,?,?)').run(id(),church,h.worker.uid,role,null,Date.now());}
+ const initial=(await h.request('/api/me',h.worker)).data.churches;assert.deepEqual(new Set(initial.map(x=>x.id)),new Set([h.cid,b]));
+ const member=h.db.prepare('SELECT id FROM memberships WHERE church_id=? AND user_id=?').get(h.cid,h.worker.uid).id;
+ assert.equal((await h.request(`${h.base}/team/${member}`,h.owner,'DELETE')).status,undefined);
+ assert.equal((await h.request(h.base,h.worker)).status,403);assert.equal((await h.request(`/api/churches/${b}`,h.worker)).status,undefined);assert.equal((await h.request(`/api/churches/${c}`,h.worker)).status,403);
+ assert.deepEqual((await h.request('/api/me',h.worker)).data.churches.map(x=>x.id),[b]);assert.equal(h.db.prepare('SELECT count(*) n FROM memberships WHERE user_id=?').get(h.worker.uid).n,3);
+ const saved=h.db.prepare('SELECT m.id,r.builtin FROM memberships m JOIN roles r ON r.id=m.role_id WHERE m.church_id=? AND m.user_id=?').get(h.cid,h.worker.uid);assert.equal(saved.id,member);assert.equal(saved.builtin,'member');
+ const role=h.db.prepare("SELECT id FROM roles WHERE church_id=? AND builtin='usher'").get(h.cid).id;
+ assert.equal((await h.request(h.base+'/invitations',h.owner,'POST',{email:`${h.worker.uid}@example.test`,role_id:role})).status,409);
+ assert.equal((await h.request(`${h.base}/team/${member}`,h.owner,'PATCH',{role_id:role})).status,409);
+ assert.equal((await h.request('/api/auth/sessions',h.worker)).status,undefined);
+});
+test('worker suspension and preserved membership roll back if audit cannot commit',async t=>{
+ const h=await fixture(t);const role=h.assign(h.worker,'usher'),member=h.db.prepare('SELECT id FROM memberships WHERE church_id=? AND user_id=?').get(h.cid,h.worker.uid).id;
+ h.db.exec("CREATE TRIGGER reject_worker_suspend BEFORE INSERT ON audit WHEN NEW.action='worker.access_suspended' BEGIN SELECT RAISE(ABORT,'test'); END;");
+ assert.equal((await h.request(`${h.base}/team/${member}`,h.owner,'DELETE')).status,500);assert.equal(h.db.prepare('SELECT count(*) n FROM worker_access_suspensions').get().n,0);assert.equal(h.db.prepare('SELECT role_id FROM memberships WHERE id=?').get(member).role_id,role);assert.equal((await h.request(h.base,h.worker)).status,undefined);
 });
 test('operational worker roles do not gain unrelated administration or platform access',async t=>{
  const h=await fixture(t);
@@ -59,5 +80,5 @@ test('migration five seeds missing roles once, preserves collisions and records 
  db.prepare('INSERT INTO churches(id,name,slug,structure,country,city,timezone,policy_version,accepted_by,accepted_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(cid,'Legacy church','legacy-worker','independent','Nigeria','Abuja','Africa/Lagos',POLICY_VERSION,uid,Date.now(),Date.now());
  db.prepare('INSERT INTO roles(id,church_id,name,permissions) VALUES(?,?,?,?)').run(custom,cid,'Head usher','["church.read"]');
  const legacyMember=id();db.prepare('INSERT INTO roles(id,church_id,name,builtin,permissions) VALUES(?,?,?,?,?)').run(legacyMember,cid,'Member','member','["church.read"]');db.prepare('INSERT INTO memberships VALUES(?,?,?,?,?,?)').run(id(),cid,uid,legacyMember,null,Date.now());db.exec('DELETE FROM schema_migrations WHERE version=5');db.close();
- for(let i=0;i<2;i++){db=openDatabase(path);assert.equal(db.prepare('SELECT count(*) n FROM roles').get().n,6);assert.equal(db.prepare("SELECT name FROM roles WHERE builtin='head_usher'").get().name,'Head usher (standard 1)');assert.equal(db.prepare('SELECT name FROM roles WHERE id=?').get(custom).name,'Head usher');assert.equal(db.prepare("SELECT permissions FROM roles WHERE id=?").get(legacyMember).permissions,'[]');assert.equal(db.prepare('SELECT role_id FROM memberships WHERE user_id=?').get(uid).role_id,legacyMember);assert.equal(db.prepare("SELECT count(*) n FROM audit WHERE action='role.member_workspace_removed'").get().n,1);assert.equal(db.prepare("SELECT count(*) n FROM audit WHERE action='role.bootstrap'").get().n,4);assert.equal(db.prepare('SELECT max(version) n FROM schema_migrations').get().n,5);db.close();}
+ for(let i=0;i<2;i++){db=openDatabase(path);assert.equal(db.prepare('SELECT count(*) n FROM roles').get().n,6);assert.equal(db.prepare("SELECT name FROM roles WHERE builtin='head_usher'").get().name,'Head usher (standard 1)');assert.equal(db.prepare('SELECT name FROM roles WHERE id=?').get(custom).name,'Head usher');assert.equal(db.prepare("SELECT permissions FROM roles WHERE id=?").get(legacyMember).permissions,'[]');assert.equal(db.prepare('SELECT role_id FROM memberships WHERE user_id=?').get(uid).role_id,legacyMember);assert.equal(db.prepare("SELECT count(*) n FROM audit WHERE action='role.member_workspace_removed'").get().n,1);assert.equal(db.prepare("SELECT count(*) n FROM audit WHERE action='role.bootstrap'").get().n,4);assert.equal(db.prepare('SELECT max(version) n FROM schema_migrations').get().n,6);db.close();}
 });

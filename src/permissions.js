@@ -19,6 +19,7 @@ export function context(db, churchId, userId, permission = 'church.read') {
     WHERE m.church_id=? AND m.user_id=? AND r.archived_at IS NULL`).get(churchId,userId);
   if (!row) fail(404,'Church workspace not found.');
   if (row.status !== 'active') fail(403,'This church workspace is suspended.');
+  if (db.prepare('SELECT user_id FROM worker_access_suspensions WHERE church_id=? AND user_id=?').get(churchId,userId)) fail(403,'Your worker dashboard is suspended for this church.');
   if (row.builtin === 'member') fail(403,'A worker role is required to open this church workspace.');
   row.permissions = JSON.parse(row.permissions);
   if (!row.permissions.includes(permission)) fail(403,'You do not have permission for this action.');

@@ -31,6 +31,7 @@ npm test
 - Independent churches, branch networks and denominations.
 - Worker-only church dashboards, branch scopes, built-in/custom roles and team invitations.
 - Head usher, usher, project coordinator and department leader role foundations.
+- Multiple church memberships/dashboards with per-church worker suspension that preserves membership.
 - Version-checked custom-role edits, expansion confirmation and safe role archival.
 - Church profiles, template preference and multiple visions/missions.
 - Append-only activity history and atomic audit for important changes.
