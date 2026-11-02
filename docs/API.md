@@ -87,3 +87,27 @@ Invitation acceptance now returns `workspaceAccess` alongside `churchId`. False 
 ## Per-church worker suspension
 
 Demoting a worker to the standard Member role or calling DELETE /api/churches/:id/team/:membershipId now preserves the membership record and suspends that church's worker dashboard. DELETE is a worker-access removal action, not registry erasure. /api/me omits that dashboard, tenant routes deny it, and GET team includes worker_suspended_at for authorised reviewers. Suspended workers cannot be restored through PATCH team (409 for a worker role) or by a new invitation to their existing membership (409). Other church memberships, worker dashboards and personal security sessions are unaffected. A same-church department appointment workflow will implement authorised restoration in Phases 5/9; there is no restore API in the current foundation.
+
+## Phase 4 — church websites
+
+All private website routes require verified, active, whole-church worker access. `website.manage` controls editing/preview/media/inbox; `website.publish` controls publishing/offline state. Custom publishing permissions also require editing permission.
+
+| Method and path (relative to `/api/churches/:id`) | Behavior |
+| --- | --- |
+| `GET /website?revision=N` | Current draft or historical snapshot; version, publication metadata, free slug and publishing hint. |
+| `PATCH /website` | `{version,snapshot}`; normalised settings/pages/entries, expected version, stable page addresses. |
+| `GET /website/revisions?before=N` | Thirty immutable revision metadata records per page. |
+| `POST /website/restore` | `{version,revision}`; creates a new draft, preserves live content. |
+| `POST /website/import-purpose` | `{version}`; copies current visions/missions into a new draft with stable entry addresses. |
+| `POST /website/publish` | `{version}`; publish the expected saved draft's enabled projection. |
+| `DELETE /website/publish` | `{version}` of current publication; hide the site and public media. |
+| `GET /website/assets` | Owned image metadata list. |
+| `POST /website/assets` | `{name,data}`; base64 PNG/JPEG, strict format/size/ownership quotas. Returns 201. |
+| `GET /website/assets/:imageId` | Authenticated image bytes encoded as base64 with verified MIME. |
+| `DELETE /website/assets/:imageId` | Delete only an image unused by current draft/publication; revisions may then require replacements. |
+| `GET /website/messages?status=pending&before=cursor` | Twenty-five decrypted own-church enquiry/comment records. Status pending/approved/rejected/resolved. |
+| `PATCH /website/messages/:messageId` | `{version,status}`; comments permit pending/approved/rejected, private contacts pending/resolved. |
+
+Anonymous routes: `GET /api/public/sites/:slug/token` returns church-bound nonce/consentVersion; `POST /api/public/sites/:slug/messages` takes page, kind, name, email, message, nonce, consentVersion, boolean consent and an empty website honeypot. Contact submissions require a published Contact page; comments require that the published page allow comments. Accepted submissions return 202 after durable storage/audit. Native POST `/c/:slug/send` uses the same service, URL-encoded fields and origin checks. Private contacts cannot be approved for public display.
+
+Public HTML routes, private preview routes, image projections and sitemap behavior are documented in PHASE-4.md. There are no member registry, payment, native streaming, domain provisioning or birthday-delivery endpoints in this phase.

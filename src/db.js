@@ -33,6 +33,13 @@ export function openDatabase(path) {
       db.prepare('INSERT INTO schema_migrations VALUES(5,?)').run(Date.now());
     }
     db.prepare('INSERT OR IGNORE INTO schema_migrations VALUES(6,?)').run(Date.now());
+    if(!db.prepare('SELECT version FROM schema_migrations WHERE version=7').get()) {
+      for(const role of db.prepare("SELECT id,church_id,permissions FROM roles WHERE builtin='church_admin'").all()) {
+        const permissions=JSON.parse(role.permissions);
+        if(!permissions.includes('website.publish')) { permissions.push('website.publish');db.prepare('UPDATE roles SET permissions=? WHERE id=?').run(JSON.stringify(permissions),role.id);audit(db,role.church_id,null,'role.website_publish',role.id,{migration:7}); }
+      }
+      db.prepare('INSERT INTO schema_migrations VALUES(7,?)').run(Date.now());
+    }
   });
   return db;
 }

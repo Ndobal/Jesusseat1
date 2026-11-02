@@ -166,7 +166,8 @@ test('profile and multiple visions and missions drive derived onboarding progres
  let w=await h.request(base,'GET',{},s);assert.equal(w.data.onboarding.filter(x=>x.done).length,2);
  assert.equal((await h.request(base,'PATCH',{welcome:'Welcome to our family',service_times:'Sunday 9 AM',template:'open-doors'},s)).status,undefined);
  for(const kind of ['vision','vision','mission'])assert.equal((await h.request(`${base}/statements`,'POST',{kind,title:`Our ${kind}`,body:'To serve the community faithfully.'},s)).status,201);
- w=await h.request(base,'GET',{},s);assert.equal(w.data.onboarding.filter(x=>x.done).length,5);
+ w=await h.request(base,'GET',{},s);assert.equal(w.data.onboarding.filter(x=>x.done).length,4);
+ const draft=(await h.request(`${base}/website`,'GET',{},s)).data;assert.equal((await h.request(`${base}/website`,'PATCH',{version:0,snapshot:draft.snapshot},s)).status,undefined);assert.equal((await h.request(`${base}/website/publish`,'POST',{version:1},s)).status,undefined);w=await h.request(base,'GET',{},s);assert.equal(w.data.onboarding.filter(x=>x.done).length,5);
  const rows=(await h.request(`${base}/statements`,'GET',{},s)).data.statements;assert.equal(rows.length,3);
  assert.equal((await h.request(`${base}/statements/${rows[0].id}`,'PATCH',{title:'Updated purpose',body:'A revised statement of purpose.',position:2},s)).status,undefined);
  assert.equal((await h.request(`${base}/statements/${rows[0].id}`,'DELETE',{},s)).status,undefined);
@@ -377,7 +378,7 @@ test('custom role edits block cross-church access, self-modification and audit f
 test('opening a version-one database upgrades roles without losing records and is repeatable',()=>{
  const dir=mkdtempSync(join(tmpdir(),'jesusseat-upgrade-')),path=join(dir,'legacy.sqlite');
  const legacy=new DatabaseSync(path);
- const originalSchema=readFileSync(new URL('../src/schema.sql',import.meta.url),'utf8').replace(', archived_at INTEGER','').replace(/CREATE TABLE IF NOT EXISTS platform_admins[\s\S]*?(?=INSERT OR IGNORE INTO schema_migrations)/,'')
+ const originalSchema=readFileSync(new URL('../src/schema.sql',import.meta.url),'utf8').replace(/CREATE TABLE IF NOT EXISTS website_drafts[\s\S]*/,'').replace(', archived_at INTEGER','').replace(/CREATE TABLE IF NOT EXISTS platform_admins[\s\S]*?(?=INSERT OR IGNORE INTO schema_migrations)/,'')
    .replace(/CREATE TABLE IF NOT EXISTS account_mfa[\s\S]*?CREATE INDEX IF NOT EXISTS mfa_challenge_user ON mfa_challenges\(user_id\);/,'');
  legacy.exec(originalSchema);
  const uid=id(),cid=id(),rid=id();
@@ -388,9 +389,9 @@ test('opening a version-one database upgrades roles without losing records and i
    for(let i=0;i<2;i++){
      const upgraded=openDatabase(path);
      assert.equal(upgraded.prepare('SELECT name,archived_at FROM roles WHERE id=?').get(rid).name,'Legacy custom');
-     assert.equal(upgraded.prepare('SELECT max(version) version FROM schema_migrations').get().version,6);
+     assert.equal(upgraded.prepare('SELECT max(version) version FROM schema_migrations').get().version,7);
      assert.equal(upgraded.prepare("SELECT count(*) n FROM sqlite_master WHERE type='table' AND name IN ('account_mfa','recovery_codes','mfa_enrollments','mfa_challenges')").get().n,4);
-     assert.equal(upgraded.prepare('SELECT count(*) n FROM churches').get().n,1);upgraded.close();
+     assert.equal(upgraded.prepare('SELECT count(*) n FROM churches').get().n,1);assert.equal(upgraded.prepare("SELECT count(*) n FROM sqlite_master WHERE type='table' AND name IN ('website_drafts','website_revisions','website_publications','website_assets','website_form_tokens','website_messages')").get().n,6);upgraded.close();
    }
  }finally{rmSync(dir,{recursive:true,force:true});}
 });

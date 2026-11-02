@@ -5,6 +5,7 @@ import { listSessions, revokeSession, revokeOtherSessions, changePassword } from
 import { roleVersion, validPermissions, manageRole } from './role-management.js';
 import { createMfa } from './mfa.js';
 import { createPublicServices, contactToken, directoryList } from './public-services.js';
+import { createWebsites } from './websites.js';
 import { PUBLIC_POLICY_VERSION } from './public-data.js';
 
 export const POLICY_VERSION=PUBLIC_POLICY_VERSION;
@@ -47,6 +48,7 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
   }
   function verified(session) { if (!session.verified_at) fail(403,'Verify your email before creating or joining a church.'); }
   const mfa=createMfa({db,key:outboxKey,origin,production,sessionFor,queueMail});
+  const websites=createWebsites({db,key:outboxKey});
   const publicServices=createPublicServices({db,key:outboxKey,origin,queueMail,notificationEmail});
   function canAssign(ctx,role) {
     if (['church_admin','pastor','head_usher'].includes(role.builtin) && (ctx.builtin!=='church_admin'||ctx.branch_id)) fail(403,'Only a church-wide administrator can assign this leadership role.');
@@ -61,7 +63,7 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
     return [
       {key:'profile',label:'Complete your church profile',done:!!(c.name&&c.country&&c.city&&c.contact_email),href:'profile'},
       {key:'structure',label:'Confirm your church structure',done:c.structure==='independent'||db.prepare('SELECT count(*) n FROM branches WHERE church_id=?').get(churchId).n>1,href:'branches'},
-      {key:'website',label:'Choose a template and welcome message',done:!!c.welcome,href:'profile'},
+      {key:'website',label:'Publish your church website',done:!!db.prepare('SELECT church_id FROM website_publications WHERE church_id=?').get(churchId),href:'website'},
       {key:'purpose',label:'Add a vision and a mission',done:db.prepare('SELECT count(DISTINCT kind) n FROM statements WHERE church_id=?').get(churchId).n===2,href:'purpose'},
       {key:'services',label:'Set your service times',done:!!c.service_times,href:'profile'},
       {key:'team',label:'Invite your ministry team',done:!!db.prepare('SELECT id FROM invitations WHERE church_id=? AND revoked_at IS NULL LIMIT 1').get(churchId)||db.prepare('SELECT count(*) n FROM memberships WHERE church_id=?').get(churchId).n>1,href:'team'}
@@ -75,10 +77,13 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
         if (headers.origin!==origin) fail(403,'Request origin is not allowed.');
         rateLimit(db,`write:${digest(ip)}`,250);
       }
-      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.3.0'}};
+      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.4.0'}};
       if (method==='GET' && path==='/api/config') return {data:{policyVersion:POLICY_VERSION,templates:TEMPLATES,permissions:PERMISSIONS,operator:'Ndovera Limited'}};
       if(method==='GET'&&path==='/api/public/churches')return {data:directoryList(db,req.query)};
       if(method==='GET'&&path==='/api/public/contact-token')return {data:{nonce:contactToken(db,ip)}};
+      const publicSiteRoute=path.match(/^\/api\/public\/sites\/([a-z0-9-]+)\/(token|messages)$/);
+      if(publicSiteRoute&&method==='GET'&&publicSiteRoute[2]==='token')return {data:websites.token(publicSiteRoute[1],ip)};
+      if(publicSiteRoute&&method==='POST'&&publicSiteRoute[2]==='messages')return {status:202,data:websites.submit(publicSiteRoute[1],body,ip)};
       if(method==='POST'&&path==='/api/public/contact')return {status:202,data:publicServices.submitContact(body,ip)};
       if (method==='POST' && path==='/api/auth/register') {
         rateLimit(db,`register:${digest(ip)}`,8,HOUR);
@@ -232,6 +237,22 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
       if(!match) fail(404,'Endpoint not found.');
       const churchId=match[1],tail=match[2]||'';
       const ctx=context(db,churchId,userId);
+      if(tail==='website'&&method==='GET')return {data:websites.get(churchId,s,req.query?.get('revision')||undefined)};
+      if(tail==='website'&&method==='PATCH')return {data:websites.save(churchId,s,body)};
+      if(tail==='website/revisions'&&method==='GET')return {data:websites.revisions(churchId,s,req.query?.get('before')||undefined)};
+      if(tail==='website/import-purpose'&&method==='POST')return {data:websites.importPurpose(churchId,s,body)};
+      if(tail==='website/restore'&&method==='POST')return {data:websites.restore(churchId,s,body)};
+      if(tail==='website/publish'&&method==='POST')return {data:websites.publish(churchId,s,body)};
+      if(tail==='website/publish'&&method==='DELETE')return {data:websites.unpublish(churchId,s,body)};
+      if(tail==='website/assets'&&method==='GET')return {data:websites.assets(churchId,s)};
+      if(tail==='website/assets'&&method==='POST')return {status:201,data:websites.upload(churchId,s,body)};
+      const siteAsset=tail.match(/^website\/assets\/([a-f0-9]{32})$/);
+      if(siteAsset&&method==='GET')return {data:websites.asset(churchId,s,siteAsset[1])};
+      if(siteAsset&&method==='DELETE')return {data:websites.removeAsset(churchId,s,siteAsset[1])};
+      if(tail==='website/messages'&&method==='GET')return {data:websites.messages(churchId,s,req.query)};
+      const siteMessage=tail.match(/^website\/messages\/([a-f0-9]{32})$/);
+      if(siteMessage&&method==='PATCH')return {data:websites.moderate(churchId,s,siteMessage[1],body)};
+
       if(method==='GET'&&tail==='directory')return {data:publicServices.directorySettings(s,churchId)};
       if(method==='PATCH'&&tail==='directory')return {data:publicServices.saveDirectory(s,churchId,body)};
       if(method==='GET' && !tail) {
