@@ -141,3 +141,35 @@ All church routes retain verified session, CSRF/origin, church/branch permission
 | `/api/public/registry/preferences/view` and `/save` | POST: minimal preferences view / one-use versioned save. |
 
 Public pages: `/join/:slug`, `/registry/verify`, `/registry/preferences`; native POST fallback at `/join/:slug` and `/join/:slug/preferences`. Account-bound acceptance pages: `/registry-link`, `/worker-appointment`. Private tokens belong in fragments, never logged query strings. Registry CSV JSON requests have a 256 KB HTTP cap; native intake 32 KB. Existing unrelated limits remain.
+
+## Phase 6 ministry operations
+
+All routes below begin `/api/churches/:churchId/ministry/`, require a verified active worker session, and preserve church/branch scope, CSRF/origin checks and same-transaction audit/history. Existing-record writes require numeric expected `version`; new group meetings use `group_version`. Body limits remain 32 KB. Lists/details are private; no new public intake endpoint is added.
+
+| Path | Methods and purpose |
+| --- | --- |
+| `services` | GET paginated assigned/reviewable services; POST reviewer creates explicit count mode/slots. |
+| `services/:service` | GET authorised detail/history; PATCH close/reopen/cancel with reason/version. |
+| `services/:service/slots/:slot` | PATCH reviewer reassigns an unreported open slot. |
+| `services/:service/slots/:slot/report` | POST assigned counter appends initial/corrected counts. |
+| `services/:service/slots/:slot/review` | POST reviewer approves/requests correction with reason/version. |
+| `attendance-trends` | GET reviewer-only closed-service counts. |
+| `groups` | GET authorised groups/leaders; POST church administrator/pastor creates. |
+| `groups/:group` | GET roster/recent meetings/history; PATCH settings/archive with version. |
+| `groups/:group/members` | POST active member add/remove with group version. |
+| `groups/:group/candidates?q=` | GET minimal exact-branch active name lookup (20 results). |
+| `groups/:group/meetings[/:meeting]` | POST new complete roster; PATCH expected-version correction/reason. |
+| `groups/:group/absences` | GET absences across latest eight meetings. |
+| `groups/:group/followups` | POST assign a recorded absence to the private registry follow-up queue. |
+| `care-options` | GET permitted categories/worker names; requires care or safeguarding access. |
+| `care?kind=&page=` | GET paginated visible cases; POST consented staff intake/assignment. |
+| `care/:case` | GET authorised details/history and view audit; PATCH progress/status/routing/rescheduling. |
+| `children?service=` | GET scoped open service choices and selected named check-in register (never code hashes). |
+| `children/search?branch_id=&q=` | GET minimal active child name lookup (20 results). |
+| `children/:child` | GET permitted collector details/encrypted history with view audit. |
+| `children/:child/guardians[/:guardian]` | POST authority-attested collector; PATCH expected-version corrections/revocation. |
+| `checkins` | POST verified check-in returns private `collection_code` once. |
+| `checkins/:checkin/collect` | POST version, correct code and in-person identity attestation. |
+| `checkins/:checkin/reissue` | POST version, current collector, verified authority and reason; invalidates old code. |
+
+Times use ISO timestamps with explicit Z/offset; group dates use YYYY-MM-DD. Counts are bounded non-negative integers; first-time visitors are included in adults/children. Welfare amount_minor is an integer; the browser converts the entered normal amount exactly to minor units. See PHASE-6.md for state transitions, role delegation, currencies and pilot limits.

@@ -1,0 +1,53 @@
+# Phase 6 — ushers, groups and ministry care
+
+Implemented on `build/phase-6`, stacked on `build/phase-5`. All operational records are private tenant data. Public church pages do not read them as website content. The build adds UI, SQLite storage, server permissions, history and audit; it does not deploy a production service.
+
+## Ushers’ corner
+
+A worker with `attendance.review` and `attendance.manage` schedules a named service with branch, timezone-qualified start/end and one counting method. Whole-hall services have exactly one counter. Section services have up to 30 uniquely named sections and require explicit confirmation that their boundaries do not overlap. Each assignment has one active authorised counter. An unreported assignment can be reassigned with a reason; a submitted report retains its counter and author.
+
+Ordinary ushers see their assigned services and sections only. They enter adults, children, included first-time visitors, actual times and non-sensitive observations. Visitor counts cannot exceed adults plus children and are never added again to the total. Reports begin missing, become submitted, then approved or correction requested. Version checks prevent overwrites and duplicate submission. Corrections require a reason and append a new immutable revision; original numbers, author and timestamps survive. Review events preserve reviewer, decision and reason. The assigned counter submits; a head usher/authorised reviewer approves. A reviewer may also be a counter; this is attendance review, not the later two-person cash count workflow.
+
+A session closes only when every assignment is approved and no child remains checked in. Closing captures an encrypted summary snapshot. Reopening requires a reason; subsequent correction/reclose retains both summary versions. Cancelled services cannot reopen in this release and cannot be cancelled with children awaiting collection. The service list shows missing/unapproved assignments, while the private trend table includes only closed services. Reopened services leave the current trends until reclosed.
+
+## Groups and follow-up
+
+Church administrators and pastors configure a same-branch small group and active authorised group leader. A group leader can see/manage only their designated groups; built-in church administrators/pastors can oversee groups in their branch scope. Group member lookup returns limited registry names/IDs, not email/phone/birthday. Active members must belong to the group's exact branch. Membership changes are version checked and do not grant dashboard access or child-collection authority.
+
+Meetings record present, absent or excused for each current active member. Dates are unique per group and cannot be in the future. Corrections require expected version/reason and retain the encrypted original roster/status history. Changes to the group roster are checked when a new meeting is submitted; historical revisions remain intact. The absence list covers the latest eight meetings. A recorded absence can create one open encrypted follow-up in the Phase 5 registry queue, assigned to an active same-scope registry worker; existing open follow-ups prevent duplicates. Registry staff complete follow-up from People & registry. Visitor welcome/follow-up continues through Phase 5's visitor records.
+
+## Care, prayer, appointments and welfare
+
+Staff record and route consented care/prayer requests; ordinary members still receive no dashboards. Self-service request forms, messaging and notifications remain Phase 10. Each case records its creator and assigned active worker, branch, status and encrypted original title/details. Updates append encrypted progress/reason/routing history; originals are retained. Case lists disclose minimal authorised summaries; opening a case records a view audit event.
+
+`care.manage` alone permits only cases created by or assigned to that worker, with branch scope. Built-in pastors/church administrators can oversee ordinary care within scope. Confidential cases additionally require `care.sensitive`, including for reassignment. These checks apply to lists, detail, history and every mutation. Consent permits recording and routing within the assigned church care team; care/prayer records are never public comments or general team notes.
+
+Pastoral appointments use explicit timezone-qualified start/end times and reject overlaps for the same assigned worker while open/in progress. Rescheduling and closure retain history. This is a staff appointment register; calendar invitations, availability booking and member notifications are not provided yet.
+
+Welfare requests store a requested amount and currency (NGN, USD, GBP, EUR, GHS, KES, ZAR, CAD, AUD). The UI takes normal amounts with up to two decimal places; the API stores integer minor units. Approval/decline requires `welfare.approve`, case visibility and a reviewer different from the request creator. Unreviewed welfare cannot be resolved directly. Decisions and progress are recorded; approval does not create a payment, ledger entry or disbursement. Finance/giving reconciliation remains Phase 8.
+
+## Children and safeguarding
+
+`children.manage` is separate from usher/attendance/care access. A child must be an active registry record in a household with relationship Child. A household is not itself collection authority. Children workers explicitly record authorised collectors, relationship, encrypted phone/name, lawful guardian-authority/identity attestation and the reason. Corrections/revocation are versioned with encrypted history.
+
+Check-in uses an open service in the child's exact branch, a current authorised collector and in-person verification. It prevents a child being checked into two services at once. The server returns one high-entropy private collection code once and stores its hash only; codes never enter lists/history/audit. The UI holds the returned code temporarily for private handover and clears private state when switching churches. Staff must verify the designated collector in person and provide the matching code to record collection. Collector edits/revocation invalidate outstanding collection codes; a fresh authorised replacement is required. Authority revocation blocks collection. An authorised worker can replace a lost code/change the collector only after fresh in-person authority attestation and a recorded reason; the old code stops working. There is no unverified pickup override. Counts and named check-in records are independent and never silently added together.
+
+Safeguarding records use the separate `safeguarding.manage` permission and are always confidential, with assigned-worker/leadership and branch restrictions. They can record a concern and escalation progress, including who handled it. Intake requires acknowledgement that immediate safety and any required external escalation are being handled. This records the church workflow; it does not call emergency services, send a safeguarding alert or make a legal determination automatically. Designate trained safeguarding staff and rehearse the local collection/escalation process before handling real children.
+
+## Upgrade and access
+
+Schema nine adds ministry services, slots, immutable count revisions, encrypted append-only events, groups/membership/meetings/attendance, encrypted care cases, encrypted authorised collectors and child check-ins. The upgrade is transactional/repeatable and does not seed services, children or care records. Existing accounts, registry, appointments and per-church suspension markers survive.
+
+Standard church administrators gain the five new permissions: `attendance.review`, `care.sensitive`, `welfare.approve`, `children.manage`, `safeguarding.manage`. Standard head ushers gain attendance review; pastors gain confidential care/welfare review/safeguarding. Ordinary ushers, secretaries, attendance officers and custom roles are not silently elevated. Role configuration requires attendance.manage with attendance.review and care.manage with care.sensitive/welfare.approve. Custom children/safeguarding roles need explicit administrator assignment. Existing role-change/subset protections still apply. Worker suspension denies all these APIs immediately.
+
+Back up before upgrading; preserve the matching stable `OUTBOX_KEY`. Encrypted notes/history/collector details require that key. Attendance numbers, service dates, assignments, group membership/attendance and operational case metadata (including requested welfare amounts) remain access-controlled plaintext in SQLite; protect the database and backups accordingly. Audit contains action, record IDs and statuses, not private request/collector/code bodies. Consent/audit/history retention and operator access need review before production. No automated purge, export or external alerting is claimed.
+
+## Validation and pilot limits
+
+Syntax checks and **183 automated tests** pass locally: 148 earlier tests plus 35 ministry tests. Coverage includes count modes/validation, assigned-only visibility, branch/tenant boundaries, review/correction/close/reopen, immutable originals, audit rollback, groups/rosters/follow-up, encrypted care, consent/assignment, welfare separation, appointment collisions, safeguarding restrictions, collection-code/authority checks, stale versions, migration repeatability and client render/payload/privacy checks.
+
+Browser layout checks used static snapshots rendered by the actual dashboard functions with isolated synthetic data, including all four desktop views and a 390px attendance layout. An attendance form overflow found during this check was fixed and width rechecked. These are layout checks, not authenticated end-to-end acceptance. Real signed-in workflows, physical-device accessibility, live email/provider delivery, safeguarding process approval and production deployment remain pilot tasks. No QA fixtures or static snapshots are shipped in the application. Hosted CI previously encountered an account billing lock; local results do not claim a hosted CI pass.
+
+Current bounded-pilot limits: service/care pages show 25 records; trends cover up to 500 closed services, group detail/history shows the latest 50 meetings with a current roster capped at 300 per attendance submission, absence calculation uses eight meetings, children select from the latest 100 open services. Group/configuration/check-in/history lists need pagination/retention work before large-directory scale. No pagination or operational scale guarantee is implied for unbounded historical detail.
+
+Next: Phase 7 Facebook/YouTube embeds and eligible media connections. Native streaming stays deferred. Giving and receipts remain Phase 8; birthday delivery remains Phase 10.

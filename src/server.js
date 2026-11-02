@@ -18,7 +18,7 @@ import { HttpError } from './security.js';
 
 const publicRoot=fileURLToPath(new URL('../public/',import.meta.url));
 const pages=new Set(['/app','/login','/register','/forgot','/reset','/verify','/invite','/new-church','/security','/mfa','/platform/inbox','/registry-link','/worker-appointment']);
-const files=new Set(['/app.js','/styles.css','/icon.svg','/public.css','/public.js','/church-site.css','/church-site.js','/registry-public.js','/registry-editor.js','/assets/community-hero.webp',...TEMPLATE_DETAILS.map(t=>`/assets/${t.id}.webp`)]);
+const files=new Set(['/app.js','/styles.css','/icon.svg','/public.css','/public.js','/church-site.css','/church-site.js','/registry-public.js','/registry-editor.js','/ministry-editor.js','/assets/community-hero.webp',...TEMPLATE_DETAILS.map(t=>`/assets/${t.id}.webp`)]);
 export function createHttpServer(config,db) {
   const app=createApp({db,...config});
   return createServer(async(req,res)=>{

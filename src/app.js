@@ -5,6 +5,7 @@ import { listSessions, revokeSession, revokeOtherSessions, changePassword } from
 import { roleVersion, validPermissions, manageRole } from './role-management.js';
 import { createMfa } from './mfa.js';
 import { createPublicServices, contactToken, directoryList } from './public-services.js';
+import { createMinistry } from './ministry.js';
 import { createRegistry } from './registry.js';
 import { createAppointments } from './appointments.js';
 import { createWebsites } from './websites.js';
@@ -50,6 +51,7 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
   }
   function verified(session) { if (!session.verified_at) fail(403,'Verify your email before creating or joining a church.'); }
   const mfa=createMfa({db,key:outboxKey,origin,production,sessionFor,queueMail});
+  const ministry=createMinistry({db,key:outboxKey});
   const registry=createRegistry({db,key:outboxKey,origin,queueMail});
   const appointments=createAppointments({db,origin,queueMail});
   const websites=createWebsites({db,key:outboxKey});
@@ -81,7 +83,7 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
         if (headers.origin!==origin) fail(403,'Request origin is not allowed.');
         rateLimit(db,`write:${digest(ip)}`,250);
       }
-      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.5.0'}};
+      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.6.0'}};
       if (method==='GET' && path==='/api/config') return {data:{policyVersion:POLICY_VERSION,templates:TEMPLATES,permissions:PERMISSIONS,operator:'Ndovera Limited'}};
       if(method==='GET'&&path==='/api/public/churches')return {data:directoryList(db,req.query)};
       if(method==='GET'&&path==='/api/public/contact-token')return {data:{nonce:contactToken(db,ip)}};
@@ -248,6 +250,7 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
       if(!match) fail(404,'Endpoint not found.');
       const churchId=match[1],tail=match[2]||'';
       const ctx=context(db,churchId,userId);
+      const ministryResult=ministry(churchId,s,tail,method,body,req.query);if(ministryResult)return ministryResult;
       if(tail==='registry/settings'&&method==='GET')return {data:registry.settings(churchId,s)};
       if(tail==='registry/settings'&&method==='PATCH')return {data:registry.settings(churchId,s,body)};
       if(tail==='registry/people'&&method==='GET')return {data:registry.list(churchId,s,req.query)};

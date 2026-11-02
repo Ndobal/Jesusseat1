@@ -46,6 +46,14 @@ export function openDatabase(path) {
       }
       db.prepare('INSERT INTO schema_migrations VALUES(8,?)').run(Date.now());
     }
+    if(!db.prepare('SELECT version FROM schema_migrations WHERE version=9').get()){
+      const additions={church_admin:['attendance.review','care.sensitive','welfare.approve','children.manage','safeguarding.manage'],head_usher:['attendance.review'],pastor:['care.sensitive','welfare.approve','safeguarding.manage']};
+      for(const r of db.prepare("SELECT * FROM roles WHERE builtin IN ('church_admin','head_usher','pastor')").all()){
+        const permissions=JSON.parse(r.permissions),added=additions[r.builtin].filter(p=>!permissions.includes(p));
+        if(added.length){db.prepare('UPDATE roles SET permissions=? WHERE id=?').run(JSON.stringify([...permissions,...added]),r.id);audit(db,r.church_id,null,'role.ministry_permissions',r.id,{migration:9,added});}
+      }
+      db.prepare('INSERT INTO schema_migrations VALUES(9,?)').run(Date.now());
+    }
   });
   return db;
 }

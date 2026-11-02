@@ -229,3 +229,82 @@ CREATE TABLE IF NOT EXISTS worker_appointments (
  FOREIGN KEY(church_id,role_id) REFERENCES roles(church_id,id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS registry_appointment_once ON worker_appointments(church_id,person_id,department_id) WHERE status IN ('pending','active');
+
+-- Phase 6: attendance revisions, private ministry care and supervised child collection.
+CREATE TABLE IF NOT EXISTS ministry_services (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), branch_id TEXT,
+ name TEXT NOT NULL, starts_at TEXT NOT NULL, ends_at TEXT NOT NULL,
+ counting_method TEXT NOT NULL CHECK(counting_method IN ('whole','sections')),
+ status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','closed','cancelled')),
+ version INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL,
+ UNIQUE(church_id,id), FOREIGN KEY(church_id,branch_id) REFERENCES branches(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS ministry_slots (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL, service_id TEXT NOT NULL, name TEXT NOT NULL,
+ assigned_to TEXT NOT NULL REFERENCES users(id), version INTEGER NOT NULL DEFAULT 1,
+ status TEXT NOT NULL DEFAULT 'missing' CHECK(status IN ('missing','submitted','changes_requested','approved')),
+ current_revision INTEGER NOT NULL DEFAULT 0, UNIQUE(service_id,name), UNIQUE(church_id,id),
+ FOREIGN KEY(church_id,service_id) REFERENCES ministry_services(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS ministry_counts (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL, slot_id TEXT NOT NULL, revision INTEGER NOT NULL,
+ adults INTEGER NOT NULL CHECK(adults BETWEEN 0 AND 100000), children INTEGER NOT NULL CHECK(children BETWEEN 0 AND 100000),
+ visitors INTEGER NOT NULL CHECK(visitors BETWEEN 0 AND adults+children),
+ actual_start TEXT NOT NULL, actual_end TEXT NOT NULL, note TEXT NOT NULL, reason TEXT NOT NULL,
+ created_by TEXT NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL, UNIQUE(slot_id,revision),
+ FOREIGN KEY(church_id,slot_id) REFERENCES ministry_slots(church_id,id)
+);
+CREATE TRIGGER IF NOT EXISTS ministry_count_no_update BEFORE UPDATE ON ministry_counts BEGIN SELECT RAISE(ABORT,'Attendance revisions are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS ministry_count_no_delete BEFORE DELETE ON ministry_counts BEGIN SELECT RAISE(ABORT,'Attendance revisions are append-only'); END;
+CREATE TABLE IF NOT EXISTS ministry_events (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, church_id TEXT NOT NULL REFERENCES churches(id), kind TEXT NOT NULL,
+ target TEXT NOT NULL, actor_id TEXT NOT NULL REFERENCES users(id), payload TEXT NOT NULL, created_at INTEGER NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS ministry_event_no_update BEFORE UPDATE ON ministry_events BEGIN SELECT RAISE(ABORT,'Ministry history is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS ministry_event_no_delete BEFORE DELETE ON ministry_events BEGIN SELECT RAISE(ABORT,'Ministry history is append-only'); END;
+CREATE TABLE IF NOT EXISTS ministry_groups (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), branch_id TEXT, name TEXT NOT NULL,
+ leader_id TEXT NOT NULL REFERENCES users(id), version INTEGER NOT NULL DEFAULT 1, archived_at INTEGER,
+ UNIQUE(church_id,id), FOREIGN KEY(church_id,branch_id) REFERENCES branches(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS ministry_group_members (
+ church_id TEXT NOT NULL, group_id TEXT NOT NULL, person_id TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1,
+ PRIMARY KEY(group_id,person_id), FOREIGN KEY(church_id,group_id) REFERENCES ministry_groups(church_id,id),
+ FOREIGN KEY(church_id,person_id) REFERENCES registry_people(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS ministry_meetings (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL, group_id TEXT NOT NULL, held_on TEXT NOT NULL,
+ version INTEGER NOT NULL DEFAULT 1, UNIQUE(group_id,held_on), UNIQUE(church_id,id),
+ FOREIGN KEY(church_id,group_id) REFERENCES ministry_groups(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS ministry_group_attendance (
+ church_id TEXT NOT NULL, meeting_id TEXT NOT NULL, person_id TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('present','absent','excused')),
+ PRIMARY KEY(meeting_id,person_id), FOREIGN KEY(church_id,meeting_id) REFERENCES ministry_meetings(church_id,id),
+ FOREIGN KEY(church_id,person_id) REFERENCES registry_people(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS ministry_cases (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), branch_id TEXT, person_id TEXT,
+ kind TEXT NOT NULL CHECK(kind IN ('care','prayer','appointment','welfare','safeguarding')),
+ confidential INTEGER NOT NULL CHECK(confidential IN (0,1)), assigned_to TEXT NOT NULL REFERENCES users(id),
+ created_by TEXT NOT NULL REFERENCES users(id), status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','approved','declined','resolved','escalated')),
+ content_cipher TEXT NOT NULL, consent_at INTEGER, version INTEGER NOT NULL DEFAULT 1,
+ starts_at TEXT, ends_at TEXT, amount_minor INTEGER, currency TEXT, created_at INTEGER NOT NULL,
+ UNIQUE(church_id,id), FOREIGN KEY(church_id,branch_id) REFERENCES branches(church_id,id),
+ FOREIGN KEY(church_id,person_id) REFERENCES registry_people(church_id,id)
+);
+CREATE INDEX IF NOT EXISTS ministry_case_scope ON ministry_cases(church_id,kind,assigned_to,status);
+CREATE TABLE IF NOT EXISTS ministry_guardians (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL, child_id TEXT NOT NULL, content_cipher TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','revoked')), version INTEGER NOT NULL DEFAULT 1,
+ created_by TEXT NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL, UNIQUE(church_id,id),
+ FOREIGN KEY(church_id,child_id) REFERENCES registry_people(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS ministry_checkins (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL, service_id TEXT NOT NULL, child_id TEXT NOT NULL, guardian_id TEXT NOT NULL,
+ code_hash TEXT NOT NULL, checked_in_by TEXT NOT NULL REFERENCES users(id), checked_in_at INTEGER NOT NULL,
+ checked_out_by TEXT REFERENCES users(id), checked_out_at INTEGER, version INTEGER NOT NULL DEFAULT 1,
+ FOREIGN KEY(church_id,service_id) REFERENCES ministry_services(church_id,id),
+ FOREIGN KEY(church_id,child_id) REFERENCES registry_people(church_id,id),
+ FOREIGN KEY(church_id,guardian_id) REFERENCES ministry_guardians(church_id,id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ministry_child_once ON ministry_checkins(church_id,child_id) WHERE checked_out_at IS NULL;
