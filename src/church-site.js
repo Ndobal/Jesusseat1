@@ -1,12 +1,12 @@
 import { html } from './public-pages.js';
 import { SITE_CONSENT } from './websites.js';
-export function renderChurchSite({snapshot,base,path='',preview=false,nonce='',comments=[],origin='',receipt=null}) {
+export function renderChurchSite({snapshot,base,path='',preview=false,nonce='',comments=[],origin='',receipt=null,joinEnabled=false}) {
  const s=snapshot.settings,pages=snapshot.pages.filter(p=>p.enabled),parts=path.split('/').filter(Boolean),page=pages.find(p=>p.slug===(parts[0]||'home'));if(!page||parts.length>2)return null;
  const item=parts[1]?page.items.find(i=>i.slug===parts[1]):null;if(parts[1]&&!item)return null;
  const link=p=>`${base}${p==='home'?'':'/'+p}`,media=aid=>`${base}/media/${aid}`;
  const image=(aid,alt,cls='',lazy=true)=>aid?`<img class="${cls}" src="${media(aid)}" alt="${html(alt)}" ${lazy?'loading="lazy"':'fetchpriority="high"'}>`:'';
  const text=v=>html(v).split(/\n\s*\n/).filter(Boolean).map(t=>`<p>${t.replaceAll('\n','<br>')}</p>`).join('');
- const nav=pages.filter(p=>p.showInNav).map(p=>`<a href="${link(p.slug)}" ${p.slug===page.slug?'aria-current="page"':''}>${html(p.title)}</a>`).join('');
+ const nav=pages.filter(p=>p.showInNav).map(p=>`<a href="${link(p.slug)}" ${p.slug===page.slug?'aria-current="page"':''}>${html(p.title)}</a>`).join('')+(joinEnabled?`<a href="/join/${base.split('/').at(-1)}">Join our church</a>`:'');
  const brand=`<a class="church-brand" href="${base}">${image(s.logoId,s.name,'church-logo')}<span>${html(s.name)}${s.tagline?`<small>${html(s.tagline)}</small>`:''}</span></a>`;
  const entryLink=i=>`${base}/${page.slug}/${i.slug}`;
  const cards=page.items.map(i=>`<article class="church-card">${image(i.imageId,i.imageAlt)}<div>${i.date?`<time datetime="${i.date}">${html(i.date)}</time>`:''}<h2><a href="${entryLink(i)}">${html(i.title)}</a></h2><p>${html(i.body.length>180?i.body.slice(0,180)+'…':i.body)}</p><a class="church-text-link" href="${entryLink(i)}">Read more ↗</a></div></article>`).join('');
