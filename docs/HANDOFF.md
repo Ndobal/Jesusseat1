@@ -65,3 +65,9 @@ Next: Phase 5's member registry, ordinary-member self-registration (name, email,
 Private people/visitor records, households, encrypted follow-up notes, reviewed CSV imports, duplicate review/merge, opt-in public registry intake, verified account linking and birthday preferences are implemented. Administrator-configured departments delegate specific worker roles to named leaders. Email-bound accepted appointments activate/reactivate only their own church; ending the final appointment suspends that church dashboard while preserving ordinary membership and preferences. Migration eight grants department management to standard church administrators and department leaders only. See PHASE-5.md.
 
 Next: Phase 6 attendance and ministry care. Birthday delivery/announcements remain Phase 10. Full department projects/reviews/rosters, availability and training records remain Phase 9. No production deployment or live mail delivery is claimed.
+
+## Phase 6 implemented
+
+Ushers’ corner now supports scoped assigned service/section reports, immutable count corrections, head-usher review, missing-report tracking, closure/reopening and approved attendance trends. Small groups add named attendance, corrected meeting history and absence-to-registry follow-up. Private care/prayer, conflict-checked pastoral appointments, separate welfare approvals, authority-verified child collection and restricted safeguarding escalation are implemented. Schema nine preserves existing registry/worker state and grants only the documented standard-role permissions. See PHASE-6.md for the API, limits, verification and pilot gates.
+
+Next: Phase 7 Facebook/YouTube viewing and eligible media connections. Finance/receipts remain Phase 8. Native streaming remains deferred. No production deployment, emergency alerting, payment disbursement or birthday delivery is claimed.

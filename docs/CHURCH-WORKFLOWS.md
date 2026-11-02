@@ -1,6 +1,6 @@
 # Church operations and worker access
 
-Owner requirements incorporated 1 November 2026. This document extends the twelve-phase plan. Phase 1–5 engineering is implemented as bounded in the phase handoffs; later modules below are specifications, not claims of working features. Public pages use concise visitor-facing language, not these implementation notes.
+Owner requirements incorporated 1 November 2026. This document extends the twelve-phase plan. Phase 1–6 engineering is implemented as bounded in the phase handoffs; later modules below are specifications, not claims of working features. Public pages use concise visitor-facing language, not these implementation notes.
 
 ## Access model
 
@@ -49,6 +49,8 @@ Public comments support a moderation queue, approval, rejection, reporting, anti
 - Birthday greeting and announcement preferences. Photograph/public contribution permissions join the workflows that publish those assets.
 
 ## Phase 6 — ushers' corner and ministry care
+
+Implemented with the operational boundaries and pilot limits in PHASE-6.md. Requests are staff-recorded; focused member request forms and outbound notifications remain Phase 10.
 
 Create service sessions for Sunday services, weekly meetings, programmes and branch events. Ushers can submit adult/child counts, seating/section counts, first-time visitors, service start/end times and non-sensitive observations. Require a configured counting method so section counts and a whole-hall count are not silently added twice. Keep count-only reporting separate from named attendance and children's check-in.
 

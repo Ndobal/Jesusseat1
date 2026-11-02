@@ -1,13 +1,13 @@
 import { fail } from './security.js';
-export const PERMISSIONS = ['church.read','church.manage','branches.manage','team.read','team.manage','roles.manage','audit.read','website.manage','website.publish','media.manage','members.manage','departments.manage','attendance.manage','groups.manage','care.manage','finance.manage'];
+export const PERMISSIONS = ['church.read','church.manage','branches.manage','team.read','team.manage','roles.manage','audit.read','website.manage','website.publish','media.manage','members.manage','departments.manage','attendance.manage','groups.manage','care.manage','finance.manage','attendance.review','care.sensitive','welfare.approve','children.manage','safeguarding.manage'];
 export const BUILTINS = {
   church_admin: { name:'Church administrator', permissions:PERMISSIONS },
-  pastor: { name:'Pastor', permissions:['church.read','team.read','groups.manage','care.manage'] },
+  pastor: { name:'Pastor', permissions:['church.read','team.read','groups.manage','care.manage','care.sensitive','welfare.approve','safeguarding.manage'] },
   secretary: { name:'Secretary', permissions:['church.read','team.read','members.manage','attendance.manage','groups.manage'] },
   media: { name:'Media team', permissions:['church.read','website.manage','media.manage'] },
   treasurer: { name:'Treasurer', permissions:['church.read','finance.manage'] },
   attendance: { name:'Attendance officer', permissions:['church.read','attendance.manage'] },
-  head_usher: { name:'Head usher', permissions:['church.read','attendance.manage'] },
+  head_usher: { name:'Head usher', permissions:['church.read','attendance.manage','attendance.review'] },
   usher: { name:'Usher', permissions:['church.read','attendance.manage'] },
   project_coordinator: { name:'Project coordinator', permissions:['church.read'] },
   department_leader: { name:'Department leader', permissions:['church.read','departments.manage'] },
