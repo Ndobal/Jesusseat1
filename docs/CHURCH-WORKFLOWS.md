@@ -1,6 +1,6 @@
 # Church operations and worker access
 
-Owner requirements incorporated 1 November 2026. This document extends the twelve-phase plan. Phase 1–3 engineering is already implemented; later modules below are specifications, not claims of working features. Public pages use concise visitor-facing language, not these implementation notes.
+Owner requirements incorporated 1 November 2026. This document extends the twelve-phase plan. Phase 1–4 engineering is implemented; later modules below are specifications, not claims of working features. Public pages use concise visitor-facing language, not these implementation notes.
 
 ## Access model
 
@@ -23,7 +23,7 @@ Appointing a pastor or head usher is restricted to a church-wide built-in admini
 | 1 | Define worker-only dashboards, confidential giving, project reconciliation and expanded operational scope. | Updated in this plan and PHASE-1.md. |
 | 2 | Deny member-role workspace access, filter the workspace chooser, add operational worker roles, protect sensitive leadership appointments and migrate existing churches. | Implemented in this continuation, with API and upgrade tests. |
 | 3 | Keep public website copy concise; offer relevant help without presenting future tools as available. | Existing site retained; member-dashboard promises removed. |
-| 4 | Tenant website pages for projects, departments, published rosters/devotionals and moderated public feedback; safe submission forms. | Upcoming. Publication uses data from the owning module when that module exists. |
+| 4 | Tenant website pages for projects, departments, published rosters/devotionals and moderated public feedback; safe submission forms. | Implemented as editable website pages and moderated comments/enquiries. Operational data/roster/finance modules remain later work. |
 | 5 | Member/household records, worker appointments, department affiliations and verified submitter identity. | Upcoming. Membership alone never opens a dashboard. |
 | 6 | Ushers' attendance corner, service sessions, count corrections, visitors, groups, care, welfare and safeguarding. | Upcoming. |
 | 7 | Facebook/YouTube services and approved media links. | Upcoming; native streaming stays deferred. |

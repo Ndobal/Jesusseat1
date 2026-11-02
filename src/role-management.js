@@ -5,6 +5,7 @@ import { PERMISSIONS, requireGlobal } from './permissions.js';
 export const roleVersion = role => digest(`${role.name}\0${role.permissions}\0${role.archived_at || ''}`);
 export function validPermissions(value, ctx) {
   if (!Array.isArray(value) || !value.length || value.length > PERMISSIONS.length || !value.includes('church.read') || !value.every(p => PERMISSIONS.includes(p) && ctx.permissions.includes(p))) fail(400, 'Choose valid permissions including church.read; you cannot grant access you do not hold.');
+  if(value.includes('website.publish')&&!value.includes('website.manage'))fail(400,'Website publishing also requires website.manage.');
   return [...new Set(value)];
 }
 

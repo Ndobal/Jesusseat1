@@ -119,3 +119,35 @@ CREATE TABLE IF NOT EXISTS worker_access_suspensions (
  FOREIGN KEY(church_id,user_id) REFERENCES memberships(church_id,user_id)
 );
 INSERT OR IGNORE INTO schema_migrations VALUES (1, unixepoch()*1000);
+CREATE TABLE IF NOT EXISTS website_drafts (
+ church_id TEXT PRIMARY KEY REFERENCES churches(id), version INTEGER NOT NULL,
+ snapshot TEXT NOT NULL, updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS website_revisions (
+ church_id TEXT NOT NULL REFERENCES churches(id), version INTEGER NOT NULL,
+ snapshot TEXT NOT NULL, created_by TEXT NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL,
+ PRIMARY KEY(church_id,version)
+);
+CREATE TRIGGER IF NOT EXISTS website_revision_no_update BEFORE UPDATE ON website_revisions BEGIN SELECT RAISE(ABORT,'Revisions are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS website_revision_no_delete BEFORE DELETE ON website_revisions BEGIN SELECT RAISE(ABORT,'Revisions are append-only'); END;
+CREATE TABLE IF NOT EXISTS website_publications (
+ church_id TEXT PRIMARY KEY REFERENCES churches(id), version INTEGER NOT NULL,
+ snapshot TEXT NOT NULL, published_by TEXT NOT NULL REFERENCES users(id), published_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS website_assets (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), name TEXT NOT NULL,
+ mime TEXT NOT NULL, data BLOB NOT NULL, size INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL,
+ created_by TEXT NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS website_assets_church ON website_assets(church_id);
+CREATE TABLE IF NOT EXISTS website_form_tokens (
+ token_hash TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id),
+ created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS website_messages (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), page_slug TEXT NOT NULL,
+ kind TEXT NOT NULL CHECK(kind IN ('contact','comment')), name TEXT NOT NULL, email TEXT NOT NULL,
+ message_cipher TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','resolved')),
+ consent_version TEXT NOT NULL, created_at INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS website_messages_church ON website_messages(church_id,status,created_at);

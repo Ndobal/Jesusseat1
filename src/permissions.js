@@ -1,5 +1,5 @@
 import { fail } from './security.js';
-export const PERMISSIONS = ['church.read','church.manage','branches.manage','team.read','team.manage','roles.manage','audit.read','website.manage','media.manage','members.manage','attendance.manage','groups.manage','care.manage','finance.manage'];
+export const PERMISSIONS = ['church.read','church.manage','branches.manage','team.read','team.manage','roles.manage','audit.read','website.manage','website.publish','media.manage','members.manage','attendance.manage','groups.manage','care.manage','finance.manage'];
 export const BUILTINS = {
   church_admin: { name:'Church administrator', permissions:PERMISSIONS },
   pastor: { name:'Pastor', permissions:['church.read','team.read','groups.manage','care.manage'] },
