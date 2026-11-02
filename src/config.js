@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { secret } from './security.js';
+import { providerConfig } from './media-providers.js';
 import { safeExternalUrl } from './public-services.js';
 
 export function loadConfig(env=process.env) {
@@ -23,5 +24,5 @@ export function loadConfig(env=process.env) {
   if(donationUrl&&(!donationLabel||donationLabel.length>80))throw new Error('Set DONATION_PROVIDER_LABEL when enabling a checkout link');
   const notificationEmail=(env.PLATFORM_NOTIFICATION_EMAIL||'').trim();
   if(notificationEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail))throw new Error('Invalid PLATFORM_NOTIFICATION_EMAIL');
-  return {production,origin,databasePath,outboxKey,host:env.HOST||'127.0.0.1',port:Number(env.PORT||3000),mailKey:env.MAIL_API_KEY,mailFrom:env.MAIL_FROM,donationUrl,donationLabel,notificationEmail};
+  return {production,origin,databasePath,outboxKey,host:env.HOST||'127.0.0.1',port:Number(env.PORT||3000),mailKey:env.MAIL_API_KEY,mailFrom:env.MAIL_FROM,donationUrl,donationLabel,notificationEmail,mediaConfig:providerConfig(env,origin)};
 }

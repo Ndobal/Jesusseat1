@@ -389,7 +389,7 @@ test('opening a version-one database upgrades roles without losing records and i
    for(let i=0;i<2;i++){
      const upgraded=openDatabase(path);
      assert.equal(upgraded.prepare('SELECT name,archived_at FROM roles WHERE id=?').get(rid).name,'Legacy custom');
-     assert.equal(upgraded.prepare('SELECT max(version) version FROM schema_migrations').get().version,9);
+     assert.equal(upgraded.prepare('SELECT max(version) version FROM schema_migrations').get().version,10);
      assert.equal(upgraded.prepare("SELECT count(*) n FROM sqlite_master WHERE type='table' AND name IN ('account_mfa','recovery_codes','mfa_enrollments','mfa_challenges')").get().n,4);
      assert.equal(upgraded.prepare('SELECT count(*) n FROM churches').get().n,1);assert.equal(upgraded.prepare("SELECT count(*) n FROM sqlite_master WHERE type='table' AND name IN ('website_drafts','website_revisions','website_publications','website_assets','website_form_tokens','website_messages')").get().n,6);upgraded.close();
    }

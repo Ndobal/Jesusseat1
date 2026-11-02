@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { purgeMedia } from './media.js';
 import { openDatabase } from './db.js';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
@@ -18,7 +19,7 @@ import { HttpError } from './security.js';
 
 const publicRoot=fileURLToPath(new URL('../public/',import.meta.url));
 const pages=new Set(['/app','/login','/register','/forgot','/reset','/verify','/invite','/new-church','/security','/mfa','/platform/inbox','/registry-link','/worker-appointment']);
-const files=new Set(['/app.js','/styles.css','/icon.svg','/public.css','/public.js','/church-site.css','/church-site.js','/registry-public.js','/registry-editor.js','/ministry-editor.js','/assets/community-hero.webp',...TEMPLATE_DETAILS.map(t=>`/assets/${t.id}.webp`)]);
+const files=new Set(['/app.js','/styles.css','/icon.svg','/public.css','/public.js','/church-site.css','/church-site.js','/registry-public.js','/registry-editor.js','/ministry-editor.js','/media-editor.js','/assets/community-hero.webp',...TEMPLATE_DETAILS.map(t=>`/assets/${t.id}.webp`)]);
 export function createHttpServer(config,db) {
   const app=createApp({db,...config});
   return createServer(async(req,res)=>{
@@ -28,9 +29,12 @@ export function createHttpServer(config,db) {
       'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
       'Cache-Control':'no-store',...(config.production?{'Strict-Transport-Security':'max-age=31536000'}:{})
     };
+    const churchHeaders={'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':security['Content-Security-Policy']+"; frame-src https://www.youtube-nocookie.com/embed/ https://www.facebook.com/plugins/video.php; object-src 'none'"};
     const respond=(status,data,extra={})=>{res.writeHead(status,{...security,...extra});res.end(data);};
     try {
       const url=new URL(req.url,config.origin);
+      const oauth=url.pathname.match(/^\/media\/oauth\/(youtube|facebook)\/callback$/);
+      if(oauth&&req.method==='GET'){const result=await app({method:'GET',path:'/api/media/oauth/'+oauth[1]+'/callback',query:url.searchParams,headers:req.headers,ip:req.socket.remoteAddress});if(result.redirect)return respond(303,'',{'Location':result.redirect});return respond(result.status||400,`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Media connection</title></head><body><h1>Media connection</h1><p>${html(result.data.error||'Return to your church Media workspace.')}</p><a href="/app">Return to JesusSeat</a></body></html>`,{'Content-Type':'text/html; charset=utf-8'});}
       const join=url.pathname.match(/^\/join\/([a-z0-9-]+)(\/preferences)?$/);
       if(join&&['GET','HEAD','POST'].includes(req.method)){
         const slug=join[1],base=`/api/public/registry/${slug}`,info=await app({method:'GET',path:base+'/info',headers:req.headers,ip:req.socket.remoteAddress});
@@ -55,7 +59,7 @@ export function createHttpServer(config,db) {
         const r=await app({method:'POST',path:`/api/public/sites/${sitePost[1]}/messages`,body,headers:req.headers,ip:req.socket.remoteAddress});
         if(r.status>=400)return respond(r.status,`<!doctype html><html lang="en"><meta charset="utf-8"><title>Message not sent</title><h1>Message not sent</h1><p>${html(r.data.error)}</p><a href="/c/${sitePost[1]}">Return to the church</a></html>`,{'Content-Type':'text/html; charset=utf-8'});
         const pub=publishedSite(db,sitePost[1]),snapshot=JSON.parse(pub.snapshot);
-        return respond(200,renderChurchSite({snapshot,base:`/c/${sitePost[1]}`,path:body.page==='home'?'':body.page,origin:config.origin,receipt:{...r.data,kind:body.kind}}),{'Content-Type':'text/html; charset=utf-8'});
+        return respond(200,renderChurchSite({snapshot,base:`/c/${sitePost[1]}`,path:body.page==='home'?'':body.page,origin:config.origin,receipt:{...r.data,kind:body.kind}}),churchHeaders);
       }
       if(req.method==='POST'&&url.pathname==='/contact'){
         if(req.headers.origin!==config.origin)return respond(403,'Request origin is not allowed.');
@@ -98,7 +102,7 @@ export function createHttpServer(config,db) {
         let content=renderChurchSite({snapshot:r.data.snapshot,base,path:rest,preview:true,origin:config.origin});
         if(!content)return respond(404,'Page not found');
         if(revision)content=content.replace(/href="(\/website-preview\/[^"]*)"/g,(_,href)=>`href="${href}?revision=${encodeURIComponent(revision)}"`);
-        return respond(200,req.method==='HEAD'?'':content,{'Content-Type':'text/html; charset=utf-8','X-Robots-Tag':'noindex, nofollow'});
+        return respond(200,req.method==='HEAD'?'':content,{...churchHeaders,'X-Robots-Tag':'noindex, nofollow'});
       }
       const tenantRoute=url.pathname.match(/^\/c\/([a-z0-9-]+)(?:\/(.*))?$/);
       if(tenantRoute){
@@ -110,10 +114,10 @@ export function createHttpServer(config,db) {
         if(page&&(page.slug==='contact'||page.allowComments)&&req.method==='GET'){const token=await app({method:'GET',path:`/api/public/sites/${tenantRoute[1]}/token`,headers:req.headers,ip:req.socket.remoteAddress});if(token.status>=400)return respond(token.status,JSON.stringify(token.data));nonce=token.data.nonce;}
         const comments=page?.allowComments?db.prepare("SELECT name,message_cipher FROM website_messages WHERE church_id=? AND page_slug=? AND kind='comment' AND status='approved' ORDER BY created_at DESC,id LIMIT 100").all(pub.church_id,page.slug).map(c=>({name:c.name,message:decrypt(c.message_cipher,config.outboxKey)})):[];
         const content=renderChurchSite({snapshot,base:`/c/${tenantRoute[1]}`,path:rest,origin:config.origin,nonce,comments,joinEnabled:!!db.prepare('SELECT church_id FROM registry_settings WHERE church_id=? AND enabled=1').get(pub.church_id)});if(!content)return respond(404,'Page not found');
-        return respond(200,req.method==='HEAD'?'':content,{'Content-Type':'text/html; charset=utf-8'});
+        return respond(200,req.method==='HEAD'?'':content,churchHeaders);
       }
       if(url.pathname==='/participation')return respond(308,'',{'Location':'/terms'});
-      if(url.pathname==='/robots.txt')return respond(200,`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app\nDisallow: /platform/\nDisallow: /security\nDisallow: /new-church\nDisallow: /verify\nDisallow: /reset\nDisallow: /invite\nDisallow: /mfa\nDisallow: /website-preview/\nDisallow: /join/\nDisallow: /registry/\nDisallow: /registry-link\nDisallow: /worker-appointment\nSitemap: ${config.origin}/sitemap.xml\n${db.prepare("SELECT c.slug FROM website_publications p JOIN churches c ON c.id=p.church_id WHERE c.status='active' ORDER BY c.slug LIMIT 10000").all().map(c=>`Sitemap: ${config.origin}/c/${c.slug}/sitemap.xml`).join('\n')}\n`,{'Content-Type':'text/plain; charset=utf-8'});
+      if(url.pathname==='/robots.txt')return respond(200,`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app\nDisallow: /platform/\nDisallow: /security\nDisallow: /new-church\nDisallow: /verify\nDisallow: /reset\nDisallow: /invite\nDisallow: /mfa\nDisallow: /website-preview/\nDisallow: /join/\nDisallow: /registry/\nDisallow: /registry-link\nDisallow: /worker-appointment\nDisallow: /media/oauth/\nSitemap: ${config.origin}/sitemap.xml\n${db.prepare("SELECT c.slug FROM website_publications p JOIN churches c ON c.id=p.church_id WHERE c.status='active' ORDER BY c.slug LIMIT 10000").all().map(c=>`Sitemap: ${config.origin}/c/${c.slug}/sitemap.xml`).join('\n')}\n`,{'Content-Type':'text/plain; charset=utf-8'});
       if(url.pathname==='/sitemap.xml')return respond(200,req.method==='HEAD'?'':sitemap(db,config.origin),{'Content-Type':'application/xml; charset=utf-8'});
       const nonce=url.pathname==='/contact'&&req.method==='GET'?contactToken(db,req.socket.remoteAddress):'';
       const publicPage=renderPublicPage({path:url.pathname,query:url.searchParams,db,config,nonce});
@@ -135,8 +139,9 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   }
   const db=openDatabase(config.databasePath),server=createHttpServer(config,db);
   server.requestTimeout=20_000;server.headersTimeout=15_000;server.maxRequestsPerSocket=100;
+  purgeMedia(db);const mediaCleanup=setInterval(()=>purgeMedia(db),3600000);mediaCleanup.unref();
   let mailing=false;
   const timer=setInterval(async()=>{if(mailing)return;mailing=true;try{await deliverMail(db,config);}finally{mailing=false;}},10_000);
   server.listen(config.port,config.host,()=>console.log(`JesusSeat listening on ${config.origin}${!config.mailKey?' — email queued locally; use npm run mail for development links.':''}`));
-  for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{clearInterval(timer);server.close(()=>process.exit(0));setTimeout(()=>process.exit(1),25_000).unref();});
+  for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{clearInterval(timer);clearInterval(mediaCleanup);server.close(()=>process.exit(0));setTimeout(()=>process.exit(1),25_000).unref();});
 }

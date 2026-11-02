@@ -173,3 +173,21 @@ All routes below begin `/api/churches/:churchId/ministry/`, require a verified a
 | `checkins/:checkin/reissue` | POST version, current collector, verified authority and reason; invalidates old code. |
 
 Times use ISO timestamps with explicit Z/offset; group dates use YYYY-MM-DD. Counts are bounded non-negative integers; first-time visitors are included in adults/children. Welfare amount_minor is an integer; the browser converts the entered normal amount exactly to minor units. See PHASE-6.md for state transitions, role delegation, currencies and pilot limits.
+
+## Phase 7 media
+
+Church routes begin `/api/churches/:churchId/media`. They require verified whole-church active media.manage workers, CSRF/origin checks on writes, version checks on existing state and atomic business audit. No provider password/token is accepted from a browser form. No new anonymous media API exposes tokens or library drafts.
+
+| Route | Methods / purpose |
+| --- | --- |
+| `/` | GET paginated library, safe connection/provider configuration and same-session pending channel/Page choices. |
+| `/items` | POST strict video URL, title/body/mode and public_attested. |
+| `/items/:item` | PATCH versioned title/body/type/archive; does not alter website entries. |
+| `/items/:item/website` | POST item version, website_version, page and optional enable_page; also needs website.manage; saves draft only. |
+| `/oauth/:provider` | POST creates one-use session/church/user-bound state and returns official consent URL. |
+| `/grants/:grant` | POST account_id, confirm and existing connection version when reconnecting; explicit provider-offered selection. |
+| `/connections/:connection/discover` | POST version, kind (uploads/broadcasts) and optional cursor; encrypted thirty-minute review preview. |
+| `/discoveries/:discovery/import` | POST selected preview URL, church title/type and public_attested; creates private library entry only. |
+| `/connections/:connection` | DELETE expected version; deletes local encrypted credentials/cache, not provider-wide consent or published links. |
+
+Provider return pages: GET `/media/oauth/youtube/callback` and `/media/oauth/facebook/callback`, using verified existing session and single-use state. They dispatch the matching `/api/media/oauth/:provider/callback` handler and redirect to the chosen church media workspace without code/token query parameters in the destination. Errors are generic. Proxies must redact the inbound callback query. Website entries now accept optional `media:{url,mode}`; only YouTube/Facebook video URLs and live/replay/upcoming are valid. See PHASE-7.md for limits, provider eligibility, setup and unverified live-contract gates.

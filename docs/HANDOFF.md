@@ -71,3 +71,9 @@ Next: Phase 6 attendance and ministry care. Birthday delivery/announcements rema
 Ushers’ corner now supports scoped assigned service/section reports, immutable count corrections, head-usher review, missing-report tracking, closure/reopening and approved attendance trends. Small groups add named attendance, corrected meeting history and absence-to-registry follow-up. Private care/prayer, conflict-checked pastoral appointments, separate welfare approvals, authority-verified child collection and restricted safeguarding escalation are implemented. Schema nine preserves existing registry/worker state and grants only the documented standard-role permissions. See PHASE-6.md for the API, limits, verification and pilot gates.
 
 Next: Phase 7 Facebook/YouTube viewing and eligible media connections. Finance/receipts remain Phase 8. Native streaming remains deferred. No production deployment, emergency alerting, payment disbursement or birthday delivery is claimed.
+
+## Phase 7 implemented
+
+All five church templates support explicitly loaded Facebook/YouTube players, individual video pages, featured Watch Live content, Home links and direct-provider fallbacks. Whole-church media workers manage a versioned library and copy to a website draft without bypassing the publisher. Optional official sign-in adapters use encrypted credentials, session-bound one-use state, explicit channel/Page selection and reviewed discovery; provider keys are absent and live integration remains an operator pilot gate. Schema ten retains old publications/roles/suspensions. See PHASE-7.md for verified scope, Meta documentation/contract limitations, cleanup, tests and policy/setup gates.
+
+Next: Phase 8 giving, private transfer receipts, reconciliation and project contribution corrections. Native streaming stays deferred; birthday delivery remains Phase 10. No production deployment or live provider verification is claimed.

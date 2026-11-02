@@ -1,6 +1,6 @@
 # Church operations and worker access
 
-Owner requirements incorporated 1 November 2026. This document extends the twelve-phase plan. Phase 1–6 engineering is implemented as bounded in the phase handoffs; later modules below are specifications, not claims of working features. Public pages use concise visitor-facing language, not these implementation notes.
+Owner requirements incorporated 1 November 2026. This document extends the twelve-phase plan. Phase 1–7 engineering is implemented as bounded in the phase handoffs; later modules below are specifications, not claims of working features. Public pages use concise visitor-facing language, not these implementation notes.
 
 ## Access model
 
@@ -26,7 +26,7 @@ Appointing a pastor or head usher is restricted to a church-wide built-in admini
 | 4 | Tenant website pages for projects, departments, published rosters/devotionals and moderated public feedback; safe submission forms. | Implemented as editable website pages and moderated comments/enquiries. Operational data/roster/finance modules remain later work. |
 | 5 | Member/household records, worker appointments, department affiliations and verified submitter identity. | Upcoming. Membership alone never opens a dashboard. |
 | 6 | Ushers' attendance corner, service sessions, count corrections, visitors, groups, care, welfare and safeguarding. | Upcoming. |
-| 7 | Facebook/YouTube services and approved media links. | Upcoming; native streaming stays deferred. |
+| 7 | Facebook/YouTube services and approved media links. | Implemented with optional provider adapters; live app/permission pilot remains. Native streaming stays deferred. |
 | 8 | Manual/gateway giving, immutable receipt review, confidential tithes, project contributions, reconciliation and payment-correction conversations. | Upcoming. |
 | 9 | Departments/reviews, active/completed projects, coordinator workflows, ministers'/workers' rosters, weekly activities and Open Heavens/devotional scheduling. | Upcoming. |
 | 10 | Focused member services, reminders, verified project conversations and communication delivery. | Upcoming; replaces the earlier general member portal. Phase 8 correction threads are usable within their own workflow first. |

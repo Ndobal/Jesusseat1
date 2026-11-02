@@ -1,6 +1,6 @@
 {
   "name": "jesusseat",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,9 +10,10 @@
     "start": "node --env-file-if-exists=.env src/server.js",
     "dev": "node --env-file-if-exists=.env src/server.js",
     "test": "node --test tests/*.test.js",
-    "check": "node --check src/server.js && node --check src/app.js && node --check src/security.js && node --check src/account-security.js && node --check src/role-management.js && node --check src/mfa.js && node --check src/totp.js && node --check src/db.js && node --check src/public-data.js && node --check src/public-pages.js && node --check src/public-services.js && node --check public/app.js && node --check public/public.js && node --check scripts/platform-admin.js && node --check src/websites.js && node --check src/website-images.js && node --check src/church-site.js && node --check public/church-site.js && node --check src/registry.js && node --check src/registry-validation.js && node --check src/registry-pages.js && node --check src/appointments.js && node --check public/registry-editor.js && node --check public/registry-public.js && node --check src/ministry-common.js && node --check src/attendance.js && node --check src/ministry-groups.js && node --check src/ministry-care.js && node --check src/ministry-children.js && node --check src/ministry.js && node --check public/ministry-editor.js",
+    "check": "node --check src/server.js && node --check src/app.js && node --check src/security.js && node --check src/account-security.js && node --check src/role-management.js && node --check src/mfa.js && node --check src/totp.js && node --check src/db.js && node --check src/public-data.js && node --check src/public-pages.js && node --check src/public-services.js && node --check public/app.js && node --check public/public.js && node --check scripts/platform-admin.js && node --check src/websites.js && node --check src/website-images.js && node --check src/church-site.js && node --check public/church-site.js && node --check src/registry.js && node --check src/registry-validation.js && node --check src/registry-pages.js && node --check src/appointments.js && node --check public/registry-editor.js && node --check public/registry-public.js && node --check src/ministry-common.js && node --check src/attendance.js && node --check src/ministry-groups.js && node --check src/ministry-care.js && node --check src/ministry-children.js && node --check src/ministry.js && node --check public/ministry-editor.js && node --check src/media.js && node --check src/media-urls.js && node --check src/media-player.js && node --check src/media-providers.js && node --check public/media-editor.js && node --check scripts/media-cleanup.js",
     "mail": "node --env-file-if-exists=.env scripts/mail.js",
     "backup": "node --env-file-if-exists=.env scripts/backup.js",
-    "admin": "node --env-file-if-exists=.env scripts/platform-admin.js"
+    "admin": "node --env-file-if-exists=.env scripts/platform-admin.js",
+    "media:cleanup": "node --env-file-if-exists=.env scripts/media-cleanup.js"
   }
 }

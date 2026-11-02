@@ -3,6 +3,7 @@ import { transaction,audit } from './db.js';
 import { context,requireGlobal } from './permissions.js';
 import { TEMPLATE_DETAILS } from './public-data.js';
 import { safeExternalUrl } from './public-services.js';
+import { siteVideo } from './media-urls.js';
 import { imageBytes } from './website-images.js';
 export const SITE_CONSENT='2026-11-01-site-1';
 const plain=(v,label,max=12000)=>text(v??'',label,0,max);
@@ -30,7 +31,7 @@ export function validateSite(raw){
   if(page.imageId&&!page.imageAlt)fail(400,'Describe the page image.');
   page.items=p.items.map(i=>{
    if(!i||!slug(i.slug))fail(400,'Use a valid entry address.');
-   const row={slug:i.slug,title:text(i.title,'Entry title',1,160),body:plain(i.body,'Entry text',8000),date:plain(i.date,'Date',10),imageId:asset(i.imageId),imageAlt:plain(i.imageAlt,'Image description',250),url:safeExternalUrl(i.url),linkLabel:plain(i.linkLabel,'Link label',100)};
+   const row={slug:i.slug,title:text(i.title,'Entry title',1,160),body:plain(i.body,'Entry text',8000),date:plain(i.date,'Date',10),imageId:asset(i.imageId),imageAlt:plain(i.imageAlt,'Image description',250),url:safeExternalUrl(i.url),linkLabel:plain(i.linkLabel,'Link label',100),media:siteVideo(i.media)};
    if(row.date&&(!/^\d{4}-\d{2}-\d{2}$/.test(row.date)||!Number.isFinite(Date.parse(row.date))||new Date(row.date).toISOString().slice(0,10)!==row.date))fail(400,'Use a valid event date.');
    if(row.imageId&&!row.imageAlt)fail(400,'Describe the entry image.');if(row.url&&!row.linkLabel)fail(400,'Name the external link.');return row;
   });

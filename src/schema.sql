@@ -308,3 +308,32 @@ CREATE TABLE IF NOT EXISTS ministry_checkins (
  FOREIGN KEY(church_id,guardian_id) REFERENCES ministry_guardians(church_id,id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ministry_child_once ON ministry_checkins(church_id,child_id) WHERE checked_out_at IS NULL;
+
+-- Phase 7: encrypted provider grants and reviewed church media.
+CREATE TABLE IF NOT EXISTS media_library (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), provider TEXT NOT NULL CHECK(provider IN ('youtube','facebook')),
+ video_id TEXT NOT NULL, url TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('live','replay','upcoming')),
+ status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','archived')), version INTEGER NOT NULL DEFAULT 1,
+ created_by TEXT NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL,
+ UNIQUE(church_id,provider,video_id)
+);
+CREATE TABLE IF NOT EXISTS media_oauth_states (
+ state_hash TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), user_id TEXT NOT NULL REFERENCES users(id),
+ session_hash TEXT NOT NULL, provider TEXT NOT NULL CHECK(provider IN ('youtube','facebook')),
+ verifier_cipher TEXT NOT NULL, expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS media_grants (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), user_id TEXT NOT NULL REFERENCES users(id),
+ session_hash TEXT NOT NULL, provider TEXT NOT NULL, payload_cipher TEXT NOT NULL, expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS media_connections (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), provider TEXT NOT NULL CHECK(provider IN ('youtube','facebook')),
+ account_id TEXT NOT NULL, label TEXT NOT NULL, credential_cipher TEXT NOT NULL, connected_by TEXT NOT NULL REFERENCES users(id),
+ version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL,
+ UNIQUE(church_id,provider,account_id), UNIQUE(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS media_discoveries (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), connection_id TEXT NOT NULL,
+ connection_version INTEGER NOT NULL, created_by TEXT NOT NULL REFERENCES users(id), payload_cipher TEXT NOT NULL, expires_at INTEGER NOT NULL,
+ FOREIGN KEY(church_id,connection_id) REFERENCES media_connections(church_id,id) ON DELETE CASCADE
+);
