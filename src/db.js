@@ -54,6 +54,7 @@ export function openDatabase(path) {
       }
       db.prepare('INSERT INTO schema_migrations VALUES(9,?)').run(Date.now());
     }
+    db.prepare('INSERT OR IGNORE INTO schema_migrations VALUES(10,?)').run(Date.now());
   });
   return db;
 }

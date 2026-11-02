@@ -5,6 +5,7 @@ import { listSessions, revokeSession, revokeOtherSessions, changePassword } from
 import { roleVersion, validPermissions, manageRole } from './role-management.js';
 import { createMfa } from './mfa.js';
 import { createPublicServices, contactToken, directoryList } from './public-services.js';
+import { createMedia } from './media.js';
 import { createMinistry } from './ministry.js';
 import { createRegistry } from './registry.js';
 import { createAppointments } from './appointments.js';
@@ -20,7 +21,7 @@ function cookieValue(header,name) {
   return value?.slice(name.length+1) || '';
 }
 
-export function createApp({db,origin,production=false,outboxKey,notificationEmail}) {
+export function createApp({db,origin,production=false,outboxKey,notificationEmail,mediaConfig={},mediaFetch}) {
   if (!outboxKey) throw new Error('An outbox encryption key is required');
   const cookieName=production?'__Host-jesusseat':'jesusseat';
   const dummyHash=hashPassword(secret());
@@ -51,6 +52,7 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
   }
   function verified(session) { if (!session.verified_at) fail(403,'Verify your email before creating or joining a church.'); }
   const mfa=createMfa({db,key:outboxKey,origin,production,sessionFor,queueMail});
+  const media=createMedia({db,key:outboxKey,origin,config:mediaConfig,fetcher:mediaFetch});
   const ministry=createMinistry({db,key:outboxKey});
   const registry=createRegistry({db,key:outboxKey,origin,queueMail});
   const appointments=createAppointments({db,origin,queueMail});
@@ -83,7 +85,7 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
         if (headers.origin!==origin) fail(403,'Request origin is not allowed.');
         rateLimit(db,`write:${digest(ip)}`,250);
       }
-      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.6.0'}};
+      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.7.0'}};
       if (method==='GET' && path==='/api/config') return {data:{policyVersion:POLICY_VERSION,templates:TEMPLATES,permissions:PERMISSIONS,operator:'Ndovera Limited'}};
       if(method==='GET'&&path==='/api/public/churches')return {data:directoryList(db,req.query)};
       if(method==='GET'&&path==='/api/public/contact-token')return {data:{nonce:contactToken(db,ip)}};
@@ -203,6 +205,8 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
         return {data:{message:'Password changed. Other sessions have been signed out.',csrf:fresh.csrf},cookie:fresh.cookie};
       }
       verified(s);
+      const mediaCallback=path.match(/^\/api\/media\/oauth\/(youtube|facebook)\/callback$/);if(mediaCallback&&method==='GET'){const result=await media.callback(s,mediaCallback[1],req.query);return {status:303,data:{message:result.cancelled?'Connection cancelled.':'Choose the church channel or Page.'},redirect:'/app?church='+result.churchId+'&tab=media'};}
+
       if(method==='POST'&&path==='/api/registry/link')return {data:registry.link(s,body)};
       if(method==='POST'&&path==='/api/registry/appointments/accept')return {data:appointments.accept(s,body)};
       if(method==='POST' && path==='/api/churches') {
@@ -251,6 +255,14 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
       const churchId=match[1],tail=match[2]||'';
       const ctx=context(db,churchId,userId);
       const ministryResult=ministry(churchId,s,tail,method,body,req.query);if(ministryResult)return ministryResult;
+      if(tail==='media'&&method==='GET')return {data:media.list(churchId,s,req.query)};
+      if(tail==='media/items'&&method==='POST')return {status:201,data:media.add(churchId,s,body)};
+      const mediaItem=tail.match(/^media\/items\/([a-f0-9]{32})$/);if(mediaItem&&method==='PATCH')return {data:media.edit(churchId,s,mediaItem[1],body)};
+      const mediaWebsite=tail.match(/^media\/items\/([a-f0-9]{32})\/website$/);if(mediaWebsite&&method==='POST'){const item=media.item(churchId,s,mediaWebsite[1]);if(item.version!==body.version||item.status!=='active')fail(409,'Choose the latest active media entry.');const draft=websites.get(churchId,s),snapshot=draft.snapshot,page=snapshot.pages.find(p=>p.slug===body.page);if(!page)fail(400,'Choose an existing website page.');const slug='video-'+item.id,old=page.items.find(i=>i.slug===slug),entry={slug,title:item.title,body:item.body,date:old?.date||'',imageId:old?.imageId||'',imageAlt:old?.imageAlt||'',url:'',linkLabel:'',media:{url:item.url,mode:item.mode}};if(old)Object.assign(old,entry);else page.items.push(entry);if(body.enable_page===true)page.enabled=true;return {data:websites.save(churchId,s,{version:body.website_version,snapshot})};}
+      const mediaStart=tail.match(/^media\/oauth\/(youtube|facebook)$/);if(mediaStart&&method==='POST')return {data:media.start(churchId,s,mediaStart[1])};
+      const mediaGrant=tail.match(/^media\/grants\/([a-f0-9]{32})$/);if(mediaGrant&&method==='POST')return {data:media.select(churchId,s,mediaGrant[1],body)};
+      const mediaConnection=tail.match(/^media\/connections\/([a-f0-9]{32})(\/discover)?$/);if(mediaConnection){if(method==='DELETE'&&!mediaConnection[2])return {data:media.disconnect(churchId,s,mediaConnection[1],body)};if(method==='POST'&&mediaConnection[2])return {data:await media.discover(churchId,s,mediaConnection[1],body)};}
+      const mediaDiscovery=tail.match(/^media\/discoveries\/([a-f0-9]{32})\/import$/);if(mediaDiscovery&&method==='POST')return {status:201,data:media.import(churchId,s,mediaDiscovery[1],body)};
       if(tail==='registry/settings'&&method==='GET')return {data:registry.settings(churchId,s)};
       if(tail==='registry/settings'&&method==='PATCH')return {data:registry.settings(churchId,s,body)};
       if(tail==='registry/people'&&method==='GET')return {data:registry.list(churchId,s,req.query)};

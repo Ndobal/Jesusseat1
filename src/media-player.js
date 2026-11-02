@@ -1,0 +1,6 @@
+import { html } from './public-pages.js';
+import { videoUrl, playerName } from './media-urls.js';
+export function renderVideo(media,title){
+ if(!media)return '';const video=videoUrl(media.url),name=playerName(video.provider);
+ return `<section class="church-video" data-video-player><div class="church-video-stage"><div class="church-video-prompt"><span class="church-eyebrow">${media.mode==='upcoming'?'UPCOMING SERVICE':media.mode==='live'?'WATCH SERVICE':'WATCH THE MESSAGE'}</span><h2>${html(title)}</h2><p>Load the ${name} player to watch here. ${name} receives your connection details when you load it.</p><button class="church-button" type="button" data-video-load data-video-src="${html(video.embedUrl)}" data-video-title="${html(title)}">Load ${name} player ↗</button></div></div><div class="church-video-actions"><a class="church-text-link" href="${html(video.url)}" target="_blank" rel="noopener noreferrer">Watch on ${name} ↗</a><button class="church-text-link" type="button" data-video-close hidden>Close player</button><span role="status" aria-live="polite"></span></div><p class="church-video-help">If playback is unavailable, open the video on ${name}.</p><noscript><p>Use the ${name} link to watch this video.</p></noscript></section>`;
+}
