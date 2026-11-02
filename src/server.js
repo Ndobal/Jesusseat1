@@ -9,6 +9,7 @@ import { deliverMail } from './mail.js';
 import { renderPublicPage, sitemap } from './public-pages.js';
 import { contactToken } from './public-services.js';
 import { TEMPLATE_DETAILS } from './public-data.js';
+import { renderRegistryJoin,renderRegistryToken } from './registry-pages.js';
 import { renderChurchSite } from './church-site.js';
 import { publishedSite,siteAssets } from './websites.js';
 import { decrypt } from './security.js';
@@ -16,8 +17,8 @@ import { html } from './public-pages.js';
 import { HttpError } from './security.js';
 
 const publicRoot=fileURLToPath(new URL('../public/',import.meta.url));
-const pages=new Set(['/app','/login','/register','/forgot','/reset','/verify','/invite','/new-church','/security','/mfa','/platform/inbox']);
-const files=new Set(['/app.js','/styles.css','/icon.svg','/public.css','/public.js','/church-site.css','/church-site.js','/assets/community-hero.webp',...TEMPLATE_DETAILS.map(t=>`/assets/${t.id}.webp`)]);
+const pages=new Set(['/app','/login','/register','/forgot','/reset','/verify','/invite','/new-church','/security','/mfa','/platform/inbox','/registry-link','/worker-appointment']);
+const files=new Set(['/app.js','/styles.css','/icon.svg','/public.css','/public.js','/church-site.css','/church-site.js','/registry-public.js','/registry-editor.js','/assets/community-hero.webp',...TEMPLATE_DETAILS.map(t=>`/assets/${t.id}.webp`)]);
 export function createHttpServer(config,db) {
   const app=createApp({db,...config});
   return createServer(async(req,res)=>{
@@ -30,6 +31,21 @@ export function createHttpServer(config,db) {
     const respond=(status,data,extra={})=>{res.writeHead(status,{...security,...extra});res.end(data);};
     try {
       const url=new URL(req.url,config.origin);
+      const join=url.pathname.match(/^\/join\/([a-z0-9-]+)(\/preferences)?$/);
+      if(join&&['GET','HEAD','POST'].includes(req.method)){
+        const slug=join[1],base=`/api/public/registry/${slug}`,info=await app({method:'GET',path:base+'/info',headers:req.headers,ip:req.socket.remoteAddress});
+        if(info.status>=400)return respond(info.status,'Church registration is not available.');
+        let receipt='',error='',status=200;
+        if(req.method==='POST'){
+          if(req.headers.origin!==config.origin)return respond(403,'Request origin is not allowed.');if(req.headers['content-type']?.split(';')[0]!=='application/x-www-form-urlencoded')return respond(415,'Use the registration form.');
+          let size=0;const chunks=[];for await(const chunk of req){size+=chunk.length;if(size>32768)return respond(413,'Form too large.');chunks.push(chunk);}
+          const body=Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString()));for(const key of ['consent','email_birthday','whatsapp_birthday','sms_birthday','birthday_share'])body[key]=body[key]==='on';
+          const r=await app({method:'POST',path:base+(join[2]?'/preferences-request':'/join'),body,headers:req.headers,ip:req.socket.remoteAddress});status=r.status>=400?r.status:200;if(status>=400)error=r.data.error;else receipt=r.data.message;
+        }
+        const nonce=await app({method:'GET',path:base+'/token',headers:req.headers,ip:req.socket.remoteAddress});if(nonce.status>=400)return respond(nonce.status,JSON.stringify(nonce.data));
+        return respond(status,req.method==='HEAD'?'':renderRegistryJoin(info.data,nonce.data.nonce,receipt,error),{'Content-Type':'text/html; charset=utf-8','X-Robots-Tag':'noindex, nofollow'});
+      }
+      if(['/registry/verify','/registry/preferences'].includes(url.pathname)&&['GET','HEAD'].includes(req.method))return respond(200,req.method==='HEAD'?'':renderRegistryToken(url.pathname.endsWith('/verify')?'verify':'preferences'),{'Content-Type':'text/html; charset=utf-8','X-Robots-Tag':'noindex, nofollow'});
       const sitePost=url.pathname.match(/^\/c\/([a-z0-9-]+)\/send$/);
       if(req.method==='POST'&&sitePost){
         if(req.headers.origin!==config.origin)return respond(403,'Request origin is not allowed.');
@@ -59,7 +75,8 @@ export function createHttpServer(config,db) {
           if(req.headers.origin!==config.origin)return respond(403,JSON.stringify({error:'Request origin is not allowed.'}),{'Content-Type':'application/json'});
           if(req.headers['content-type']?.split(';')[0]!=='application/json')return respond(415,JSON.stringify({error:'Send application/json.'}),{'Content-Type':'application/json'});
           const upload=/^\/api\/churches\/[a-f0-9]{32}\/website\/assets$/.test(url.pathname),siteEdit=/^\/api\/churches\/[a-f0-9]{32}\/website$/.test(url.pathname);
-          const maxBody=upload?2200000:siteEdit?262144:32768;
+          const importCsv=/^\/api\/churches\/[a-f0-9]{32}\/registry\/imports$/.test(url.pathname);
+          const maxBody=upload?2200000:siteEdit||importCsv?262144:32768;
           let size=0;const chunks=[];
           for await(const chunk of req) {size+=chunk.length;if(size>maxBody)return respond(413,JSON.stringify({error:'Request is too large.'}),{'Content-Type':'application/json'});chunks.push(chunk);}
           try {body=JSON.parse(Buffer.concat(chunks).toString()||'{}');} catch{return respond(400,JSON.stringify({error:'Invalid JSON.'}),{'Content-Type':'application/json'});}
@@ -92,11 +109,11 @@ export function createHttpServer(config,db) {
         const page=snapshot.pages.find(p=>p.slug===(rest.split('/')[0]||'home')&&p.enabled);let nonce='';
         if(page&&(page.slug==='contact'||page.allowComments)&&req.method==='GET'){const token=await app({method:'GET',path:`/api/public/sites/${tenantRoute[1]}/token`,headers:req.headers,ip:req.socket.remoteAddress});if(token.status>=400)return respond(token.status,JSON.stringify(token.data));nonce=token.data.nonce;}
         const comments=page?.allowComments?db.prepare("SELECT name,message_cipher FROM website_messages WHERE church_id=? AND page_slug=? AND kind='comment' AND status='approved' ORDER BY created_at DESC,id LIMIT 100").all(pub.church_id,page.slug).map(c=>({name:c.name,message:decrypt(c.message_cipher,config.outboxKey)})):[];
-        const content=renderChurchSite({snapshot,base:`/c/${tenantRoute[1]}`,path:rest,origin:config.origin,nonce,comments});if(!content)return respond(404,'Page not found');
+        const content=renderChurchSite({snapshot,base:`/c/${tenantRoute[1]}`,path:rest,origin:config.origin,nonce,comments,joinEnabled:!!db.prepare('SELECT church_id FROM registry_settings WHERE church_id=? AND enabled=1').get(pub.church_id)});if(!content)return respond(404,'Page not found');
         return respond(200,req.method==='HEAD'?'':content,{'Content-Type':'text/html; charset=utf-8'});
       }
       if(url.pathname==='/participation')return respond(308,'',{'Location':'/terms'});
-      if(url.pathname==='/robots.txt')return respond(200,`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app\nDisallow: /platform/\nDisallow: /security\nDisallow: /new-church\nDisallow: /verify\nDisallow: /reset\nDisallow: /invite\nDisallow: /mfa\nDisallow: /website-preview/\nSitemap: ${config.origin}/sitemap.xml\n${db.prepare("SELECT c.slug FROM website_publications p JOIN churches c ON c.id=p.church_id WHERE c.status='active' ORDER BY c.slug LIMIT 10000").all().map(c=>`Sitemap: ${config.origin}/c/${c.slug}/sitemap.xml`).join('\n')}\n`,{'Content-Type':'text/plain; charset=utf-8'});
+      if(url.pathname==='/robots.txt')return respond(200,`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app\nDisallow: /platform/\nDisallow: /security\nDisallow: /new-church\nDisallow: /verify\nDisallow: /reset\nDisallow: /invite\nDisallow: /mfa\nDisallow: /website-preview/\nDisallow: /join/\nDisallow: /registry/\nDisallow: /registry-link\nDisallow: /worker-appointment\nSitemap: ${config.origin}/sitemap.xml\n${db.prepare("SELECT c.slug FROM website_publications p JOIN churches c ON c.id=p.church_id WHERE c.status='active' ORDER BY c.slug LIMIT 10000").all().map(c=>`Sitemap: ${config.origin}/c/${c.slug}/sitemap.xml`).join('\n')}\n`,{'Content-Type':'text/plain; charset=utf-8'});
       if(url.pathname==='/sitemap.xml')return respond(200,req.method==='HEAD'?'':sitemap(db,config.origin),{'Content-Type':'application/xml; charset=utf-8'});
       const nonce=url.pathname==='/contact'&&req.method==='GET'?contactToken(db,req.socket.remoteAddress):'';
       const publicPage=renderPublicPage({path:url.pathname,query:url.searchParams,db,config,nonce});

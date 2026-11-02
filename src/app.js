@@ -5,6 +5,8 @@ import { listSessions, revokeSession, revokeOtherSessions, changePassword } from
 import { roleVersion, validPermissions, manageRole } from './role-management.js';
 import { createMfa } from './mfa.js';
 import { createPublicServices, contactToken, directoryList } from './public-services.js';
+import { createRegistry } from './registry.js';
+import { createAppointments } from './appointments.js';
 import { createWebsites } from './websites.js';
 import { PUBLIC_POLICY_VERSION } from './public-data.js';
 
@@ -48,6 +50,8 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
   }
   function verified(session) { if (!session.verified_at) fail(403,'Verify your email before creating or joining a church.'); }
   const mfa=createMfa({db,key:outboxKey,origin,production,sessionFor,queueMail});
+  const registry=createRegistry({db,key:outboxKey,origin,queueMail});
+  const appointments=createAppointments({db,origin,queueMail});
   const websites=createWebsites({db,key:outboxKey});
   const publicServices=createPublicServices({db,key:outboxKey,origin,queueMail,notificationEmail});
   function canAssign(ctx,role) {
@@ -77,13 +81,18 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
         if (headers.origin!==origin) fail(403,'Request origin is not allowed.');
         rateLimit(db,`write:${digest(ip)}`,250);
       }
-      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.4.0'}};
+      if (method==='GET' && path==='/api/health') return {status:200,data:{status:'ok',version:'0.5.0'}};
       if (method==='GET' && path==='/api/config') return {data:{policyVersion:POLICY_VERSION,templates:TEMPLATES,permissions:PERMISSIONS,operator:'Ndovera Limited'}};
       if(method==='GET'&&path==='/api/public/churches')return {data:directoryList(db,req.query)};
       if(method==='GET'&&path==='/api/public/contact-token')return {data:{nonce:contactToken(db,ip)}};
       const publicSiteRoute=path.match(/^\/api\/public\/sites\/([a-z0-9-]+)\/(token|messages)$/);
       if(publicSiteRoute&&method==='GET'&&publicSiteRoute[2]==='token')return {data:websites.token(publicSiteRoute[1],ip)};
       if(publicSiteRoute&&method==='POST'&&publicSiteRoute[2]==='messages')return {status:202,data:websites.submit(publicSiteRoute[1],body,ip)};
+      const registryPublic=path.match(/^\/api\/public\/registry\/([a-z0-9-]+)\/(info|token|join|preferences-request)$/);
+      if(registryPublic){const slug=registryPublic[1],action=registryPublic[2];if(method==='GET'&&action==='info')return {data:registry.publicInfo(slug)};if(method==='GET'&&action==='token')return {data:registry.token(slug,ip)};if(method==='POST'&&action==='join')return {status:202,data:registry.submit(slug,body,ip)};if(method==='POST'&&action==='preferences-request')return {status:202,data:registry.preferencesRequest(slug,body,ip)};}
+      if(method==='POST'&&path==='/api/public/registry/verify')return {data:registry.verify(body,ip)};
+      if(method==='POST'&&path==='/api/public/registry/preferences/view')return {data:registry.preferences(body,ip)};
+      if(method==='POST'&&path==='/api/public/registry/preferences/save')return {data:registry.preferences(body,ip,true)};
       if(method==='POST'&&path==='/api/public/contact')return {status:202,data:publicServices.submitContact(body,ip)};
       if (method==='POST' && path==='/api/auth/register') {
         rateLimit(db,`register:${digest(ip)}`,8,HOUR);
@@ -192,6 +201,8 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
         return {data:{message:'Password changed. Other sessions have been signed out.',csrf:fresh.csrf},cookie:fresh.cookie};
       }
       verified(s);
+      if(method==='POST'&&path==='/api/registry/link')return {data:registry.link(s,body)};
+      if(method==='POST'&&path==='/api/registry/appointments/accept')return {data:appointments.accept(s,body)};
       if(method==='POST' && path==='/api/churches') {
         rateLimit(db,`create-church:${userId}`,5,DAY);
         const name=text(body.name,'Church name',2,160),slug=text(body.slug,'Web address',3,60).toLowerCase();
@@ -237,6 +248,26 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
       if(!match) fail(404,'Endpoint not found.');
       const churchId=match[1],tail=match[2]||'';
       const ctx=context(db,churchId,userId);
+      if(tail==='registry/settings'&&method==='GET')return {data:registry.settings(churchId,s)};
+      if(tail==='registry/settings'&&method==='PATCH')return {data:registry.settings(churchId,s,body)};
+      if(tail==='registry/people'&&method==='GET')return {data:registry.list(churchId,s,req.query)};
+      if(tail==='registry/people'&&method==='POST')return {status:201,data:registry.create(churchId,s,body)};
+      if(tail==='registry/submissions'&&method==='GET')return {data:registry.submissions(churchId,s,req.query)};
+      const submission=tail.match(/^registry\/submissions\/([a-f0-9]{32})$/);
+      if(submission&&method==='PATCH')return {data:registry.review(churchId,s,submission[1],body)};
+      if(tail==='registry/households'&&method==='GET')return {data:registry.households(churchId,s)};
+      if(tail==='registry/households'&&method==='POST')return {status:201,data:registry.household(churchId,s,body)};
+      const household=tail.match(/^registry\/households\/([a-f0-9]{32})$/);if(household&&method==='PATCH')return {data:registry.household(churchId,s,body,household[1])};
+      if(tail==='registry/followups'&&method==='GET')return {data:registry.followups(churchId,s)};
+      if(tail==='registry/imports'&&method==='POST')return {status:201,data:registry.importPreview(churchId,s,body)};
+      if(tail==='registry/imports/commit'&&method==='POST')return {data:registry.importCommit(churchId,s,body)};
+      const person=tail.match(/^registry\/people\/([a-f0-9]{32})(?:\/(link|merge|followups)(?:\/([a-f0-9]{32}))?)?$/);
+      if(person){const pid=person[1],action=person[2];if(!action&&method==='GET')return {data:registry.person(churchId,s,pid)};if(!action&&method==='PATCH')return {data:registry.edit(churchId,s,pid,body)};if(action==='link'&&method==='POST')return {data:registry.linkInvite(churchId,s,pid,body)};if(action==='merge'&&method==='POST')return {data:registry.merge(churchId,s,pid,body)};if(action==='followups'&&method==='POST'&&!person[3])return {status:201,data:registry.followup(churchId,s,pid,body)};if(action==='followups'&&method==='PATCH'&&person[3])return {data:registry.followup(churchId,s,pid,body,person[3])};}
+      if(tail==='departments'&&method==='GET')return {data:appointments.list(churchId,s)};
+      if(tail==='departments'&&method==='POST')return {status:201,data:appointments.save(churchId,s,body)};
+      const department=tail.match(/^departments\/([a-f0-9]{32})(?:\/(candidates|appointments)(?:\/([a-f0-9]{32}))?)?$/);
+      if(department){const did=department[1],action=department[2];if(!action&&method==='PATCH')return {data:appointments.save(churchId,s,body,did)};if(!action&&method==='DELETE')return {data:appointments.archive(churchId,s,did,body)};if(action==='candidates'&&method==='GET')return {data:appointments.candidates(churchId,s,did,req.query?.get('email'))};if(action==='appointments'&&method==='POST')return {status:201,data:appointments.invite(churchId,s,did,body)};if(action==='appointments'&&method==='DELETE'&&department[3])return {data:appointments.end(churchId,s,did,department[3],body)};}
+
       if(tail==='website'&&method==='GET')return {data:websites.get(churchId,s,req.query?.get('revision')||undefined)};
       if(tail==='website'&&method==='PATCH')return {data:websites.save(churchId,s,body)};
       if(tail==='website/revisions'&&method==='GET')return {data:websites.revisions(churchId,s,req.query?.get('before')||undefined)};
@@ -348,6 +379,8 @@ export function createApp({db,origin,production=false,outboxKey,notificationEmai
           }
           if(m.builtin==='church_admin'&&(method==='DELETE'||role.builtin!=='church_admin')&&db.prepare(`SELECT count(*) n FROM memberships m JOIN roles r ON r.id=m.role_id WHERE m.church_id=? AND r.builtin='church_admin' AND m.branch_id IS NULL`).get(churchId).n<=1) fail(409,'Keep at least one church administrator.');
           const stopping=method==='DELETE'||role.builtin==='member';
+          if(!stopping&&(m.role_id!==role.id||m.branch_id!==branch)&&db.prepare("SELECT a.id FROM worker_appointments a JOIN registry_people p ON p.id=a.person_id WHERE a.church_id=? AND p.user_id=? AND a.status='active'").get(churchId,m.user_id))fail(409,'End department appointments before replacing this worker role.');
+          if(stopping)db.prepare("UPDATE worker_appointments SET status=CASE WHEN status='pending' THEN 'cancelled' ELSE 'ended' END,token_hash=NULL,version=version+1,ended_at=? WHERE church_id=? AND person_id IN (SELECT id FROM registry_people WHERE church_id=? AND user_id=?) AND status IN ('pending','active')").run(Date.now(),churchId,churchId,m.user_id);
           if(stopping&&m.builtin!=='member') {
             db.prepare('INSERT OR IGNORE INTO worker_access_suspensions VALUES(?,?,?,?)').run(churchId,m.user_id,Date.now(),userId);
             audit(db,churchId,userId,'worker.access_suspended',m.id,{previousRole:m.role_id,previousBranch:m.branch_id});

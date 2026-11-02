@@ -1,6 +1,6 @@
 # Church operations and worker access
 
-Owner requirements incorporated 1 November 2026. This document extends the twelve-phase plan. Phase 1–4 engineering is implemented; later modules below are specifications, not claims of working features. Public pages use concise visitor-facing language, not these implementation notes.
+Owner requirements incorporated 1 November 2026. This document extends the twelve-phase plan. Phase 1–5 engineering is implemented as bounded in the phase handoffs; later modules below are specifications, not claims of working features. Public pages use concise visitor-facing language, not these implementation notes.
 
 ## Access model
 
@@ -42,11 +42,11 @@ Public comments support a moderation queue, approval, rejection, reporting, anti
 ## Phase 5 — people, workers and departments
 
 - People directory, households, visitor-to-member follow-up, import validation and duplicate review.
-- Worker commissioning/appointment, department membership, team lead, coordinator, availability and training records.
+- Worker commissioning/appointment, department membership and designated team leaders. Coordinator projects, availability and training records continue in Phase 9.
 - Separation of person records, sign-in accounts and worker assignments. A record need not have a sign-in account.
-- Branch-scoped appointments, start/end dates and immediate removal of operational access on reassignment.
-- Identity verification for a donor's own receipt or project conversation, without exposing the church member directory.
-- Consent preferences for public names, photographs, announcements and communications.
+- Branch-scoped appointments with recorded acceptance/end timestamps and immediate removal of operational access when the final appointment ends. Future-dated commissioning schedules continue in Phase 9.
+- Verified identity linking without exposing the church member directory. Donor receipt/conversation verification joins the Phase 8 payment workflows.
+- Birthday greeting and announcement preferences. Photograph/public contribution permissions join the workflows that publish those assets.
 
 ## Phase 6 — ushers' corner and ministry care
 

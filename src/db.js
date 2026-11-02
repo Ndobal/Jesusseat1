@@ -40,6 +40,12 @@ export function openDatabase(path) {
       }
       db.prepare('INSERT INTO schema_migrations VALUES(7,?)').run(Date.now());
     }
+    if(!db.prepare('SELECT version FROM schema_migrations WHERE version=8').get()){
+      for(const r of db.prepare("SELECT * FROM roles WHERE builtin IN ('church_admin','department_leader')").all()){
+        const permissions=JSON.parse(r.permissions);if(!permissions.includes('departments.manage')){permissions.push('departments.manage');db.prepare('UPDATE roles SET permissions=? WHERE id=?').run(JSON.stringify(permissions),r.id);audit(db,r.church_id,null,'role.departments_manage',r.id,{migration:8});}
+      }
+      db.prepare('INSERT INTO schema_migrations VALUES(8,?)').run(Date.now());
+    }
   });
   return db;
 }

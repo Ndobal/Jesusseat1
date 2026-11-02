@@ -41,21 +41,27 @@ See CHURCH-WORKFLOWS.md for the expanded requirements and phase assignments. It 
 - Custom roles can be edited and archived with safeguards; standard roles remain immutable. Archiving requires no assigned members or pending active invitations.
 - No real church/member data was imported; tests use synthetic fixtures only.
 - This is Node + persistent SQLite, not a Worker application. Revisit ADR-001 if Cloudflare-only hosting becomes a requirement.
-- Member registry, finance/payment processing, focused member services, custom domains and the full super-admin console remain later work. Phase 4 includes website publishing and a church enquiry/comment review inbox, not the later operational modules.
+- Finance/payment processing, focused member services, custom domains and the full super-admin console remain later work. Phase 4 includes website publishing and a church enquiry/comment review inbox, not the later operational modules.
 - **Native streaming is out of scope.** Phase 7 uses Facebook/YouTube embeds only. Do not implement native ingestion/recording or cloud streaming billing during this release.
 
 ## Next
 
-Phase 3 engineering is implemented; complete its live-provider and owner-policy launch gates before production. Phase 4 is implemented as described below. Begin Phase 5 when selected, preserving the public projection boundary. Keep native streaming deferred. Domains/Webnoryx, donation ledgers and full platform suspension/support workflows remain in their assigned later phases.
+Phase 3 engineering is implemented; complete its live-provider and owner-policy launch gates before production. Phase 4 is implemented as described below. Phase 5 is implemented below, preserving the public projection boundary. Keep native streaming deferred. Domains/Webnoryx, donation ledgers and full platform suspension/support workflows remain in their assigned later phases.
 
 ## Registry, birthdays and per-church suspension continuation
 
 Migration six adds worker_access_suspensions. Worker demotion/removal preserves the membership row as Member instead of deleting it; the suspension marker independently denies the workspace and removes it from /api/me. A role edit or new invitation cannot restore access. No global account/session suspension occurs, and the same person can keep worker dashboards and member relationships in other churches. Audit and the state change are atomic. The team UI distinguishes suspended dashboards and does not offer an ineffective role-change restore.
 
-Registry self-registration (name, email, phone, birth day/month without a year), department-based activation/reactivation, and consent-aware birthday greetings/pastor/church notices are planned in CHURCH-WORKFLOWS.md. They are not claimed implemented here. Birthday eligibility will use registry membership, not worker status. The department module must supply the authorised reactivation transaction; no temporary admin bypass or fabricated department exists in the current build.
+Registry self-registration (name, email, phone, birth day/month without a year), department-based activation/reactivation, and consent-aware birthday greetings/pastor/church notices are planned in CHURCH-WORKFLOWS.md. Phase 5 now implements registry intake, linking and authorised appointments; delivery remains Phase 10. Birthday eligibility will use registry membership, not worker status. The department module must supply the authorised reactivation transaction; no temporary admin bypass or fabricated department exists in the current build.
 
 ## Phase 4 implemented
 
 Five live templates share a validated website content model. Whole-church website workers edit settings, core/custom pages and entries; reorder menus/entries; upload validated private PNG/JPEG images; preview drafts/history; copy church visions/missions; review enquiries/comments. Separate website publishers control publication and taking sites offline. Public sites use /c/:slug with enabled-page projections, owned public image references, independent entry routes and sitemap discovery. Drafts/private contact information never become public automatically. Migration seven grants publishing to standard administrators only. See PHASE-4.md for limits, routes, verification and launch gates.
 
 Next: Phase 5's member registry, ordinary-member self-registration (name, email, phone, birth day/month only), households/visitors, duplicate review and verified identity linking. Preserve multiple church memberships and per-church worker dashboard suspension. Implement authorised department appointment reactivation without an admin bypass. Birthdays must follow registry membership rather than worker status; scheduled email/WhatsApp/SMS and consent-aware church notices remain Phase 10.
+
+## Phase 5 implemented
+
+Private people/visitor records, households, encrypted follow-up notes, reviewed CSV imports, duplicate review/merge, opt-in public registry intake, verified account linking and birthday preferences are implemented. Administrator-configured departments delegate specific worker roles to named leaders. Email-bound accepted appointments activate/reactivate only their own church; ending the final appointment suspends that church dashboard while preserving ordinary membership and preferences. Migration eight grants department management to standard church administrators and department leaders only. See PHASE-5.md.
+
+Next: Phase 6 attendance and ministry care. Birthday delivery/announcements remain Phase 10. Full department projects/reviews/rosters, availability and training records remain Phase 9. No production deployment or live mail delivery is claimed.

@@ -111,3 +111,33 @@ All private website routes require verified, active, whole-church worker access.
 Anonymous routes: `GET /api/public/sites/:slug/token` returns church-bound nonce/consentVersion; `POST /api/public/sites/:slug/messages` takes page, kind, name, email, message, nonce, consentVersion, boolean consent and an empty website honeypot. Contact submissions require a published Contact page; comments require that the published page allow comments. Accepted submissions return 202 after durable storage/audit. Native POST `/c/:slug/send` uses the same service, URL-encoded fields and origin checks. Private contacts cannot be approved for public display.
 
 Public HTML routes, private preview routes, image projections and sitemap behavior are documented in PHASE-4.md. There are no member registry, payment, native streaming, domain provisioning or birthday-delivery endpoints in this phase.
+
+## Phase 5 registry and appointments
+
+All church routes retain verified session, CSRF/origin, church/branch permission checks and audit. Mutation payloads use expected `version` where a record already exists. See PHASE-5.md for limits and consent behaviour.
+
+| Route | Methods / purpose |
+| --- | --- |
+| `/api/churches/:id/registry/settings` | GET/PATCH: whole-church `church.manage`; enable intake, branch, leap-day policy. |
+| `/api/churches/:id/registry/people` | GET/POST: `members.manage`, scoped paginated people/search/filter and creation. |
+| `/api/churches/:id/registry/people/:person` | GET/PATCH: detail, duplicate flags and versioned correction/leaving. |
+| `/api/churches/:id/registry/people/:person/link` | POST: identity-attested account-link invitation. |
+| `/api/churches/:id/registry/people/:person/merge` | POST: source/target versions, explicit reason. |
+| `/api/churches/:id/registry/households[/:household]` | GET/POST/PATCH: same-branch household grouping. |
+| `/api/churches/:id/registry/followups` | GET: open scoped tasks. |
+| `/api/churches/:id/registry/people/:person/followups[/:task]` | POST/PATCH: encrypted note, assignee, due date/status. |
+| `/api/churches/:id/registry/submissions[/:submission]` | GET/PATCH: email-proof review, approve/reject or match existing person. |
+| `/api/churches/:id/registry/imports` | POST: CSV staged validation preview. |
+| `/api/churches/:id/registry/imports/commit` | POST: creator-bound reviewed valid rows. |
+| `/api/churches/:id/departments[/:department]` | GET/POST/PATCH/DELETE: designated leader/delegated roles; DELETE archives empty departments. |
+| `/api/churches/:id/departments/:department/candidates?email=` | GET: authorised exact-email candidate lookup. |
+| `/api/churches/:id/departments/:department/appointments[/:appointment]` | POST/DELETE: invite, cancel/end with expected version. |
+| `/api/registry/link` | POST: verified-email account-link acceptance; no church dashboard required. |
+| `/api/registry/appointments/accept` | POST: verified-email same-church worker activation/reactivation. |
+| `/api/public/registry/:slug/info` and `/token` | GET: enabled public registry settings / one-use form nonce. |
+| `/api/public/registry/:slug/join` | POST: consented encrypted intake, queues proof mail. |
+| `/api/public/registry/verify` | POST: single-use email proof. |
+| `/api/public/registry/:slug/preferences-request` | POST: generic private-link request. |
+| `/api/public/registry/preferences/view` and `/save` | POST: minimal preferences view / one-use versioned save. |
+
+Public pages: `/join/:slug`, `/registry/verify`, `/registry/preferences`; native POST fallback at `/join/:slug` and `/join/:slug/preferences`. Account-bound acceptance pages: `/registry-link`, `/worker-appointment`. Private tokens belong in fragments, never logged query strings. Registry CSV JSON requests have a 256 KB HTTP cap; native intake 32 KB. Existing unrelated limits remain.

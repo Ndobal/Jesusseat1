@@ -151,3 +151,81 @@ CREATE TABLE IF NOT EXISTS website_messages (
  consent_version TEXT NOT NULL, created_at INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS website_messages_church ON website_messages(church_id,status,created_at);
+CREATE TABLE IF NOT EXISTS registry_settings (
+ church_id TEXT PRIMARY KEY REFERENCES churches(id), enabled INTEGER NOT NULL DEFAULT 0,
+ default_branch_id TEXT, leap_day TEXT NOT NULL DEFAULT 'feb28', version INTEGER NOT NULL DEFAULT 1,
+ FOREIGN KEY(church_id,default_branch_id) REFERENCES branches(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS registry_households (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), branch_id TEXT,
+ name TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL,
+ UNIQUE(church_id,id), FOREIGN KEY(church_id,branch_id) REFERENCES branches(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS registry_people (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), branch_id TEXT,
+ name TEXT NOT NULL, name_key TEXT NOT NULL, email TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '',
+ birth_day INTEGER, birth_month INTEGER, kind TEXT NOT NULL CHECK(kind IN ('member','visitor')),
+ status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','left','merged')),
+ household_id TEXT, household_role TEXT NOT NULL DEFAULT '', user_id TEXT REFERENCES users(id),
+ email_verified_at INTEGER, email_birthday INTEGER NOT NULL DEFAULT 0, whatsapp_birthday INTEGER NOT NULL DEFAULT 0,
+ sms_birthday INTEGER NOT NULL DEFAULT 0, birthday_share INTEGER NOT NULL DEFAULT 0,
+ consent_version TEXT NOT NULL, consent_source TEXT NOT NULL, consent_at INTEGER NOT NULL,
+ duplicate_reason_cipher TEXT, merged_into TEXT, version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+ UNIQUE(church_id,id), FOREIGN KEY(church_id,branch_id) REFERENCES branches(church_id,id),
+ FOREIGN KEY(church_id,household_id) REFERENCES registry_households(church_id,id),
+ FOREIGN KEY(church_id,merged_into) REFERENCES registry_people(church_id,id),
+ CHECK((birth_day IS NULL AND birth_month IS NULL) OR (birth_day IS NOT NULL AND birth_month IS NOT NULL AND birth_month BETWEEN 1 AND 12 AND birth_day BETWEEN 1 AND CASE birth_month WHEN 2 THEN 29 WHEN 4 THEN 30 WHEN 6 THEN 30 WHEN 9 THEN 30 WHEN 11 THEN 30 ELSE 31 END))
+);
+CREATE INDEX IF NOT EXISTS registry_people_church ON registry_people(church_id,status,name_key);
+CREATE UNIQUE INDEX IF NOT EXISTS registry_user_once ON registry_people(church_id,user_id) WHERE user_id IS NOT NULL AND status<>'merged';
+CREATE TABLE IF NOT EXISTS registry_forms (
+ token_hash TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS registry_submissions (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), branch_id TEXT,
+ email TEXT NOT NULL, payload_cipher TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending_email'
+ CHECK(status IN ('pending_email','pending_review','approved','rejected')),
+ person_id TEXT, version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL,
+ FOREIGN KEY(church_id,branch_id) REFERENCES branches(church_id,id),
+ FOREIGN KEY(church_id,person_id) REFERENCES registry_people(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS registry_tokens (
+ token_hash TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id),
+ kind TEXT NOT NULL CHECK(kind IN ('verify','link','preferences')), target_id TEXT NOT NULL,
+ email TEXT NOT NULL, target_version INTEGER NOT NULL, expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS registry_consents (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL, person_id TEXT NOT NULL, actor_id TEXT REFERENCES users(id),
+ source TEXT NOT NULL, version TEXT NOT NULL, choices TEXT NOT NULL, created_at INTEGER NOT NULL,
+ FOREIGN KEY(church_id,person_id) REFERENCES registry_people(church_id,id)
+);
+CREATE TRIGGER IF NOT EXISTS registry_consent_no_update BEFORE UPDATE ON registry_consents BEGIN SELECT RAISE(ABORT,'Consent history is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS registry_consent_no_delete BEFORE DELETE ON registry_consents BEGIN SELECT RAISE(ABORT,'Consent history is append-only'); END;
+CREATE TABLE IF NOT EXISTS registry_followups (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL, person_id TEXT NOT NULL, assigned_to TEXT REFERENCES users(id),
+ due_date TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','contacted','complete','cancelled')),
+ note_cipher TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL,
+ FOREIGN KEY(church_id,person_id) REFERENCES registry_people(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS registry_imports (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), created_by TEXT NOT NULL REFERENCES users(id),
+ branch_id TEXT, payload_cipher TEXT NOT NULL, fingerprint TEXT NOT NULL, expires_at INTEGER NOT NULL,
+ committed_at INTEGER, FOREIGN KEY(church_id,branch_id) REFERENCES branches(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS registry_departments (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL REFERENCES churches(id), branch_id TEXT,
+ name TEXT NOT NULL, leader_user_id TEXT REFERENCES users(id), allowed_roles TEXT NOT NULL,
+ archived_at INTEGER, version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL,
+ UNIQUE(church_id,id), FOREIGN KEY(church_id,branch_id) REFERENCES branches(church_id,id)
+);
+CREATE TABLE IF NOT EXISTS worker_appointments (
+ id TEXT PRIMARY KEY, church_id TEXT NOT NULL, person_id TEXT NOT NULL, department_id TEXT NOT NULL,
+ role_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','active','ended','cancelled')),
+ token_hash TEXT UNIQUE, expires_at INTEGER NOT NULL, invited_by TEXT NOT NULL REFERENCES users(id),
+ person_version INTEGER NOT NULL, department_version INTEGER NOT NULL, role_version TEXT NOT NULL,
+ membership_fingerprint TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, ended_at INTEGER,
+ FOREIGN KEY(church_id,person_id) REFERENCES registry_people(church_id,id),
+ FOREIGN KEY(church_id,department_id) REFERENCES registry_departments(church_id,id),
+ FOREIGN KEY(church_id,role_id) REFERENCES roles(church_id,id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS registry_appointment_once ON worker_appointments(church_id,person_id,department_id) WHERE status IN ('pending','active');

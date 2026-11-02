@@ -2,7 +2,7 @@
 
 **An evangelical product of [Ndovera Limited](https://www.ndovera.com).**
 
-Free church registration and a secure ministry workspace. This repository contains the Phase 1 specification, Phase 2 account/church foundation, Phase 3 public platform website and Phase 4 church website editing/publishing. Later phases add membership/ministry/finance tools, Facebook/YouTube embeds and Webnoryx domain integration.
+Free church registration and a secure ministry workspace. This repository contains the Phase 1 specification, Phase 2 account/church foundation, Phase 3 public platform website Phase 4 church website editing/publishing and Phase 5 private registry/department appointments. Later phases add attendance/ministry/finance tools, Facebook/YouTube embeds and Webnoryx domain integration.
 
 **Native JesusSeat streaming is deferred. Only Facebook/YouTube embedded streaming is planned for this release.**
 
@@ -49,6 +49,7 @@ npm test
 - [Phase 2 implementation and acceptance checklist](docs/PHASE-2.md)
 - [Expanded church workflows and phase mapping](docs/CHURCH-WORKFLOWS.md)
 - [Phase 4 church websites](docs/PHASE-4.md)
+- [Phase 5 registry and appointments](docs/PHASE-5.md)
 - [Phase 3 public website and acceptance checklist](docs/PHASE-3.md)
 - [Two-step verification and recovery](docs/TWO-STEP-VERIFICATION.md)
 - [API and permissions](docs/API.md)
